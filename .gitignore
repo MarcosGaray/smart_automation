@@ -1,0 +1,48 @@
+# ========================
+# Python
+# ========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+*.log
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# ========================
+# Selenium / Chrome
+# ========================
+chromedriver
+chromedriver.exe
+chromedriver.log
+
+# Webdriver Manager downloaded binaries
+.wdm/
+
+# ========================
+# VSCode
+# ========================
+.vscode/
+
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# Project Files to Ignore
+# ========================
+
+# Credenciales
+data.py
+
+# Archivos temporales
+*.tmp
+*.bak
