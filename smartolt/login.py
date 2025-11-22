@@ -2,8 +2,7 @@ import time
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
-URL = "https://empresa.smartolt.com/auth/login"
+from data import URL
 
 def login_smartolt(driver, user, password):
 

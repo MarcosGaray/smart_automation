@@ -4,3 +4,5 @@
 
 USER = "tu_usuario_aqui"
 PASSWORD = "tu_password_aqui"
+URL = "tu_login_URL_aqui"
+ONU_PRUEBA = "tu_username_aqui"
