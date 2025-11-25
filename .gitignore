@@ -1,48 +1,38 @@
-# ========================
-# Python
-# ========================
+# Byte-compiled / Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.pdb
-*.egg-info/
-*.egg
-*.log
 
-# Virtual environments
+# Virtual envs
 venv/
 env/
 .venv/
 
-# ========================
-# Selenium / Chrome
-# ========================
-chromedriver
-chromedriver.exe
-chromedriver.log
-
-# Webdriver Manager downloaded binaries
-.wdm/
-
-# ========================
 # VSCode
-# ========================
 .vscode/
 
-# ========================
 # OS
-# ========================
 .DS_Store
 Thumbs.db
 
-# ========================
-# Project Files to Ignore
-# ========================
+# ChromeDriver / webdriver manager local files
+chromedriver
+chromedriver.exe
+.wdm/
 
-# Credenciales
+# Credentials
 data.py
 
-# Archivos temporales
-*.tmp
-*.bak
+# Logs
+automation.log
+
+# Sheets outputs
+
+# Ignorar contenido de sheets/input y sheets/output
+sheets/input/*
+sheets/output/*
+
+# Pero mantener un placeholder vacío si existen
+!sheets/input/.keep
+!sheets/output/.keep
