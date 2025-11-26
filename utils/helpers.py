@@ -41,3 +41,6 @@ def find_in(parent, locator) -> Optional[object]:
         return parent.find_element(*locator)
     except NoSuchElementException:
         return None
+
+def wait_until(driver,until_expression, timeout=15):
+    return WebDriverWait(driver, timeout).until(until_expression)

@@ -9,3 +9,7 @@ INPUT_ONUS_FILE = "sheets/input/onus.txt"
 
 # Opcional: tiempo máximo de espera para WebDriverWait en segundos
 DEFAULT_WAIT = 15
+
+#vlan migration dictionary
+#{'actual_vlan': 'target_vlan'}
+VLAN_MIGRATION_DICT = {'actual_vlan1': 'target_vlan1', 'actual_vlan2': 'target_vlan2'}
