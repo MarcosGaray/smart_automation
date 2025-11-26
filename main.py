@@ -1,4 +1,4 @@
-# main.py
+from selenium.webdriver.common.by import By
 from driver_setup import start_driver
 from smartolt.login import login_smartolt
 from smartolt.navigate import go_to_configured_tab, search_user, open_matching_result
@@ -6,7 +6,10 @@ from sheets.sheets_reader import load_onu_list
 from sheets.sheets_writer import log_success, log_fail, save_unprocessed
 from utils.logger import get_logger
 from utils.helpers import wait_visible
+from smartolt.onu_actions import migrate_vlan
+from smartolt.navigate import go_back
 from data import USER, PASSWORD, INPUT_ONUS_FILE
+import pdb
 
 logger = get_logger(__name__)
 
@@ -54,9 +57,17 @@ def main():
             matched = open_matching_result(driver, onu)
 
             if matched:
-                log_success(onu)
-                no_procesados.discard(onu)  # <<< ✔ quitar procesado
-                logger.info(f"ÉXITO: {onu}")
+                migrated = migrate_vlan(driver, onu)
+                if migrated:
+                    log_success(onu)
+                    no_procesados.discard(onu)  # <<< ✔ quitar procesado
+                    logger.info(f"ÉXITO: {onu}")
+                else:
+                    log_fail(onu, "Fallo en la migración")
+                    logger.warning(f"FALLO: {onu}") 
+
+                go_back(driver,(By.XPATH, "//tr[contains(@class, 'valign-center')]"))
+                #pdb.set_trace()
             else:
                 log_fail(onu, "Sin coincidencia exacta")
                 logger.warning(f"FALLO: {onu}")

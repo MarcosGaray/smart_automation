@@ -1,6 +1,8 @@
 from selenium.webdriver.common.by import By
-from utils.helpers import wait_visible, wait_clickable, find_in
+from utils.helpers import wait_visible, wait_clickable, find_in,wait_presence, wait_clickable, safe_click
 from utils.logger import get_logger
+from sheets.sheets_writer import log_success, log_fail, save_unprocessed
+import pdb
 
 logger = get_logger(__name__)
 
@@ -11,9 +13,7 @@ def reveal_pppoe_username(driver, timeout=8):
     """
     # supuestos: hay un botón o link que muestra el PPPoE username; y un span con id 'pppoeUsername' o similar.
     possible_buttons = [
-        (By.XPATH, "//button[contains(., 'Show PPPoE') or contains(., 'Reveal')]"),
-        (By.XPATH, "//a[contains(., 'Show PPPoE') or contains(., 'Reveal')]"),
-        (By.XPATH, "//button[contains(., 'PPP') or contains(., 'pppoe')]"),
+        (By.XPATH, "//a[contains(@class,'show_pppoe_username')]")
     ]
 
     clicked = False
@@ -28,13 +28,13 @@ def reveal_pppoe_username(driver, timeout=8):
 
     # buscar el span que contiene el username
     possible_spans = [
-        (By.XPATH, "//*[contains(@id,'pppoe') and (contains(., '@') or string-length(normalize-space(.))>1)]"),
-        (By.XPATH, "//span[contains(.,'@') or contains(.,'pppoe') or contains(@class,'pppoe')]")
+        (By.XPATH, "//span[contains(@class, 'pppoe_username') and not(contains(@class, 'hidden'))]")
     ]
-    for sp in possible_spans:
+    #pdb.set_trace()
+    for span in possible_spans:
         try:
-            el = wait_visible(driver, sp, timeout=4)
-            text = el.text.strip()
+            username_field = wait_presence(driver, span, timeout=4)
+            text = username_field.get_attribute("innerText").strip()
             if text:
                 return text
         except Exception:
@@ -42,5 +42,25 @@ def reveal_pppoe_username(driver, timeout=8):
 
     logger.warning("No se pudo obtener PPPoE username con los selectores configurados.")
     return None
+
+def get_onu_status(driver, timeout=8):
+    element_status = wait_visible(driver, (By.XPATH, "//dd[@id='onu_status_wrapper']"), timeout=timeout)
+    return element_status.get_attribute("innerText").strip()
+
+def migrate_vlan(driver, onu, timeout=8):
+    onu_status = get_onu_status(driver, timeout=timeout)    
+    expected_status = 'Online'
+    
+    configure_locator = (By.XPATH, "//a[@href='#updateSpeedProfiles']")
+    
+    try:
+        safe_click(driver, configure_locator)
+        input("Continuar...")
+    except Exception:
+        log_fail(onu, "No se pudo acceder a la sección de configuración.")
+        logger.error("No se pudo acceder a la sección de configuración.")
+        return False
+    
+    return True
 
 # TODO: agregar migrate_vlan(driver), reboot_onu(driver), etc. cuando tengamos los selectores exactos.
