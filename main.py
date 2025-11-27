@@ -10,6 +10,7 @@ from smartolt.onu_actions import migrate_vlan
 from smartolt.navigate import go_back
 from data import USER, PASSWORD, INPUT_ONUS_FILE
 import pdb
+from exceptions import ElementException
 
 logger = get_logger(__name__)
 
@@ -42,11 +43,14 @@ def main():
         save_unprocessed(list(no_procesados))
         return
 
-    if not go_to_configured_tab(driver):
-        logger.warning("No se pudo acceder a Configured. Abortando.")
+    try:
+        go_to_configured_tab(driver)
+    except ElementException as elemExc:
+        logger.warning(f"Abortando. {elemExc}")
         driver.quit()
         save_unprocessed(list(no_procesados))
         return
+        
 
     # PROCESAR ONUs
     for onu in onu_list:
@@ -73,7 +77,8 @@ def main():
                 logger.warning(f"FALLO: {onu}")
 
         except Exception as e:
-            log_fail(onu, f"Error inesperado: {e}")
+            short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
+            log_fail(onu, f"Error inesperado: {short_msg}")
             logger.error(f"ERROR {onu}: {e}")
 
     # EXPORTAR RESTANTES SIEMPRE

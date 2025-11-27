@@ -5,20 +5,25 @@ from utils.logger import get_logger
 from smartolt.onu_actions import reveal_pppoe_username
 from selenium.common.exceptions import StaleElementReferenceException
 import time
+from exceptions import ElementException
 
 logger = get_logger(__name__)
 
 def go_to_configured_tab(driver, timeout=10):
-    locator = (By.XPATH, "//*[@id='navbar-main']//a[contains(normalize-space(.), 'Configured')]")
-    if wait_clickable(driver, locator, timeout=timeout):
-        driver.find_element(*locator).click()
-        logger.info("Clicked on Configured tab")
-        
-        wait_visible(driver, (By.XPATH, "//table[contains(@class,'table')]",), timeout=10)
-        return True
-    else:
-        logger.error("No se pudo clicar en Configured")
-        return False
+    try:
+        locator = (By.XPATH, "//*[@id='navbar-main']//a[contains(normalize-space(.), 'Configured')]")
+        if wait_clickable(driver, locator, timeout=timeout):
+            driver.find_element(*locator).click()
+            logger.info("Clicked on Configured tab")
+            wait_visible(driver, (By.XPATH, "//table[contains(@class,'table')]",), timeout=10)
+            return True
+        else:
+            raise ElementException("No se pudo clicar en Configured")
+    except ElementException as e:
+        raise
+    except Exception as e:
+        raise ElementException(f"No se pudo clicar en Configured: {e}")
+
 
 
 def search_user(driver, user, timeout=10):

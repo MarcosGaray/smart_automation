@@ -4,15 +4,12 @@ from utils.logger import get_logger
 from sheets.sheets_writer import log_success, log_fail, save_unprocessed
 import pdb
 from data import VLAN_MIGRATION_DICT
+from exceptions import ElementException
 
 logger = get_logger(__name__)
 
 def reveal_pppoe_username(driver, timeout=8):
-    """
-    En la vista de ONU, clickea el control que revela el PPPoE username y devuelve el texto.
-    Este selector debe adaptarse al HTML real del SmartOLT. Se dan varias opciones.
-    """
-    # supuestos: hay un botón o link que muestra el PPPoE username; y un span con id 'pppoeUsername' o similar.
+    # Buscar el botón que muestra el username
     possible_buttons = [
         (By.XPATH, "//a[contains(@class,'show_pppoe_username')]")
     ]
@@ -27,7 +24,7 @@ def reveal_pppoe_username(driver, timeout=8):
         except Exception:
             continue
 
-    # buscar el span que contiene el username
+    # Buscar el span que contiene el username
     possible_spans = [
         (By.XPATH, "//span[contains(@class, 'pppoe_username') and not(contains(@class, 'hidden'))]")
     ]
@@ -44,21 +41,50 @@ def reveal_pppoe_username(driver, timeout=8):
     logger.warning("No se pudo obtener PPPoE username con los selectores configurados.")
     return None
 
+
+##ACCIONES/INTERACCIONES
+# Obtiene el status de la ONU (online, disconnected, etc.)
 def get_onu_status(driver, timeout=8):
     element_status = wait_visible(driver, (By.XPATH, "//dd[@id='onu_status_wrapper']"), timeout=timeout)
     return element_status.get_attribute("innerText").strip()
 
+
+def open_configure_modal(driver, configure_locator = (By.XPATH, "//a[@href='#updateSpeedProfiles']"),timeout=8):
+    if not safe_click(driver, configure_locator):
+        raise ElementException("No se pudo abrir la ventana Configure.")
+    return True
+
+
+
+from selenium.common.exceptions import StaleElementReferenceException
+def modal_closed(modal):
+    try:
+        if not modal.is_displayed():
+            return True
+
+        style = modal.get_attribute("style") or ""
+        if "display: none" in style.lower():
+            return True
+
+    except StaleElementReferenceException:
+        return True
+    return False
+
+
 def migrate_vlan(driver, onu, timeout=8):
     # 1) Verificar estado
-    onu_status = get_onu_status(driver, timeout=timeout)    
-    expected_status = 'Online'
+    try:
+        onu_status = get_onu_status(driver, timeout=timeout)    
+        expected_status = 'Online'
+    except Exception as ex:
+        raise ElementException(f"Error al obtener el estado de la ONU")
     
     # 2) Abrir modal Configure
-    configure_locator = (By.XPATH, "//a[@href='#updateSpeedProfiles']")
-    if not safe_click(driver, configure_locator):
-        log_fail(onu, "No se pudo abrir la ventana Configure.")
-        logger.error("No se pudo abrir la ventana Configure.")
-        return False
+    try:
+        open_configure_modal(driver)
+    except Exception as ex:
+        raise ElementException(f"Error al abrir la ventana modal de configuración")
+
     
     # 3) Esperar a que la modal esté presente y visible (manejar animación)
     # Intentamos detectar la modal visible (Bootstrap usa clase 'in' o 'show' según versión)
@@ -76,9 +102,7 @@ def migrate_vlan(driver, onu, timeout=8):
             continue
 
     if modal is None:
-        log_fail(onu, "No apareció la ventana modal de configuración (posible animación/carga).")
-        logger.error("Modal no apareció.")
-        return False
+        raise ElementException("No apareció la ventana modal de configuración (posible animación/carga).")
 
     # 4️⃣ Buscar el SELECT de VLAN
     select_locator = (By.XPATH, "//select[@id='extra_vlan_id']")
@@ -145,9 +169,9 @@ def migrate_vlan(driver, onu, timeout=8):
             # fallback: seleccionar por value del option encontrado
             value = target_option.get_attribute("value")
             select.select_by_value(value)
-    except Exception as e:
-        log_fail(onu, f"No se pudo seleccionar la VLAN target '{target_text}': {e}")
-        logger.error(f"No se pudo seleccionar la VLAN target '{target_text}': {e}")
+    except Exception as ex:
+        log_fail(onu, f"No se pudo seleccionar la VLAN target '{target_text}': {ex}")
+        logger.error(f"No se pudo seleccionar la VLAN target '{target_text}': {ex}")
         return False
 
     logger.info(f"ONU {onu} - Seleccionada VLAN target '{target_text}'")
@@ -162,8 +186,8 @@ def migrate_vlan(driver, onu, timeout=8):
     # 12) Opcional: esperar a que la modal se cierre / que termine la operación
     # Esperar a que la modal desaparezca
     #CONTINUAR AQUI, NO FUNCIONA
-    wait_until(driver, lambda d: "display: none" not in modal.get_attribute("style"))
-
+    wait_until(driver, modal_closed, timeout=10)
+    
     logger.info(f"ONU {onu} VLAN migrada correctamente: {current_text} -> {target_text}")
     log_success(onu)
     input("LLegamos hasta el final")
