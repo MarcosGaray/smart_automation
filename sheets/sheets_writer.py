@@ -2,7 +2,8 @@ import os
 import pandas as pd
 from datetime import datetime
 
-OUTPUT_FOLDER = "sheets/output"
+date = datetime.now().strftime("%Y-%m-%d__%H-%M-%S")
+OUTPUT_FOLDER = f"sheets/output/{date}"
 
 def ensure_output_folder():
     if not os.path.exists(OUTPUT_FOLDER):

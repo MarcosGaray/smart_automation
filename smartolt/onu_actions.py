@@ -48,46 +48,13 @@ def get_onu_status(driver, timeout=8):
     element_status = wait_visible(driver, (By.XPATH, "//dd[@id='onu_status_wrapper']"), timeout=timeout)
     return element_status.get_attribute("innerText").strip()
 
-
-def open_configure_modal(driver, configure_locator = (By.XPATH, "//a[@href='#updateSpeedProfiles']"),timeout=8):
+def open_configure_modal(driver, timeout=8):
+    configure_locator = (By.XPATH, "//a[@href='#updateSpeedProfiles']")
     if not safe_click(driver, configure_locator):
-        raise ElementException("No se pudo abrir la ventana Configure.")
+        raise ElementException("No se pudo abrir la ventana Configure. Error al clicar en el botón Configure")
     return True
 
-
-
-from selenium.common.exceptions import StaleElementReferenceException
-def modal_closed(modal):
-    try:
-        if not modal.is_displayed():
-            return True
-
-        style = modal.get_attribute("style") or ""
-        if "display: none" in style.lower():
-            return True
-
-    except StaleElementReferenceException:
-        return True
-    return False
-
-
-def migrate_vlan(driver, onu, timeout=8):
-    # 1) Verificar estado
-    try:
-        onu_status = get_onu_status(driver, timeout=timeout)    
-        expected_status = 'Online'
-    except Exception as ex:
-        raise ElementException(f"Error al obtener el estado de la ONU")
-    
-    # 2) Abrir modal Configure
-    try:
-        open_configure_modal(driver)
-    except Exception as ex:
-        raise ElementException(f"Error al abrir la ventana modal de configuración")
-
-    
-    # 3) Esperar a que la modal esté presente y visible (manejar animación)
-    # Intentamos detectar la modal visible (Bootstrap usa clase 'in' o 'show' según versión)
+def get_configuration_modal(driver, timeout=8):
     modal_locators = [
         (By.XPATH, "//div[contains(@class,'modal') and @id='updateSpeedProfiles']"),
         (By.XPATH, "//div[contains(@class,'modal') and not(contains(@style,'display: none'))]"),
@@ -103,94 +70,142 @@ def migrate_vlan(driver, onu, timeout=8):
 
     if modal is None:
         raise ElementException("No apareció la ventana modal de configuración (posible animación/carga).")
+    return modal
 
-    # 4️⃣ Buscar el SELECT de VLAN
+def get_select_vlan_element(driver, timeout=8):
     select_locator = (By.XPATH, "//select[@id='extra_vlan_id']")
     try:
-        select_el = wait_visible(driver, select_locator, timeout=6)
-    except:
-        log_fail(onu, "No se encontró el selector de VLAN.")
-        logger.error("No se encontró el selector de VLAN.")
-        return False
-    
-    # 5 Convertir a objeto Select de Selenium
+        select_element = wait_visible(driver, select_locator, timeout=6)
+    except Exception:
+        raise ElementException("No se encontró el selector de VLAN.")
+    return select_element
+
+def get_selenium_select_element(select_element):
     try:
         from selenium.webdriver.support.ui import Select
-        select = Select(select_el)
+        selenium_select = Select(select_element)
     except:
-        log_fail(onu, "Error creando objeto Select.")
-        logger.error("Error creando objeto Select.")
-        return False
-    
-    # 6) Leer la opción actualmente seleccionada por su texto (innerText)
+        raise ElementException("No se pudo crear el objeto Select de selenium.")
+    return selenium_select
+
+def get_selenium_select_innerText(selenium_select):
     try:
-        current_option = select.first_selected_option
+        current_option = selenium_select.first_selected_option
         current_text = current_option.get_attribute("innerText").strip()
     except Exception:
-        log_fail(onu, "No se pudo obtener la opción actualmente seleccionada.")
-        logger.error("No se pudo leer la opción seleccionada del select.")
-        return False
+        raise ElementException("No se pudo leer la opción seleccionada del vlan select.")
+    return current_text
 
-    logger.info(f"ONU {onu} - VLAN actual (texto): '{current_text}'")
-
-
-    # 7) Verificar si la VLAN actual está en el mapa
-    if current_text not in VLAN_MIGRATION_DICT.keys():
-        log_fail(onu, f"VLAN actual '{current_text}' no está en el diccionario de migración.")
-        logger.error(f"VLAN actual '{current_text}' no está en el diccionario de migración.")
-        return False
+def is_vlan_in_migration_dictionary(vlan, vlan_migration_dict):
+    return vlan in vlan_migration_dict.keys()
     
-    target_text = VLAN_MIGRATION_DICT[current_text]
-    # 8) Si actual == target → ya migrada
-    if current_text == target_text:
-        logger.info(f"ONU {onu} ya estaba en target VLAN '{target_text}'.")
-        log_success(onu)
-        return True
-
-    # 9) Buscar la opción cuyo texto coincida con target_text
-    target_option = None
-    for option in select.options:
+def get_select_target_option(selenium_select, target_text):
+    select_target_option = None
+    
+    for option in selenium_select.options:
         option_text = option.get_attribute("innerText").strip()
         if option_text == target_text:
-            target_option = option
+            select_target_option = option
             break
 
-    if target_option is None:
-        log_fail(onu, f"Target VLAN '{target_text}' no encontrada entre las opciones.")
-        logger.error(f"Target VLAN '{target_text}' no encontrada en select.")
-        return False
-    
-    # 10) Seleccionar la opción target (select_by_value o select_by_visible_text)
-    try:
-        # preferimos seleccionar por visible text si coincide exactamente:
+    if select_target_option is None:
+        raise ElementException(f"Target VLAN '{target_text}' no encontrada entre las opciones de VLAN de la ONU")
+
+    return select_target_option
+
+def wait_modal_closed(driver, modal, timeout=10):
+    from selenium.common.exceptions import StaleElementReferenceException
+    def is_closed(_):
         try:
-            select.select_by_visible_text(target_text)
+            # si ya no se muestra → cerrada
+            if not modal.is_displayed():
+                return True
+
+            style = modal.get_attribute("style") or ""
+            if "display: none" in style.lower():
+                return True
+
+            # sigue visible → no cerrada
+            return False
+
+        except StaleElementReferenceException:
+            # Si está stale, significa que fue removida → cerrada
+            return True
+
+    wait_until(driver, is_closed, timeout=timeout)
+
+
+def migrate_vlan(driver, onu, timeout=8):
+    # 1) Verificar estado
+    try:
+        onu_status = get_onu_status(driver, timeout=timeout)    
+        expected_status = 'Online'
+    except Exception as ex:
+        raise ElementException(f"Error al obtener el estado de la ONU")
+    
+    # 2) Abrir modal Configure
+    # 3) Esperar a que la modal esté presente y visible (manejar animación)
+    try:
+        open_configure_modal(driver)
+        modal = get_configuration_modal(driver)
+    except ElementException as ex:
+        raise
+
+
+    # 4️⃣ Buscar el SELECT de VLAN
+    # 5 Convertir a objeto Select de Selenium
+    # 6) Leer la opción actualmente seleccionada por su texto (innerText)
+    try:
+        select_element = get_select_vlan_element(driver, timeout=6)
+        selenium_select = get_selenium_select_element(select_element)
+        vlan_select_current_text = get_selenium_select_innerText(selenium_select)
+    except ElementException:
+        raise
+    
+
+    logger.info(f"ONU {onu} - VLAN actual (texto): '{vlan_select_current_text}'")
+
+    # 7) Verificar si la VLAN actual está en el mapa
+    if not is_vlan_in_migration_dictionary(vlan_select_current_text, VLAN_MIGRATION_DICT):
+        raise ElementException(f"VLAN actual '{vlan_select_current_text}' no está en el diccionario de migración")
+
+
+    target_text = VLAN_MIGRATION_DICT[vlan_select_current_text]
+    # 8) Si actual == target → ya migrada
+    if vlan_select_current_text == target_text:
+        logger.info(f"ONU {onu} ya estaba en target VLAN '{target_text}'")
+        return True
+
+    # 9) Buscar la opción cuyo texto coincida con target_text y seleccionar
+    try:
+        target_option = get_select_target_option(selenium_select, target_text)
+        try:
+            # seleccionar por visible text si coincide exactamente:
+            selenium_select.select_by_visible_text(target_text)
         except Exception:
             # fallback: seleccionar por value del option encontrado
             value = target_option.get_attribute("value")
-            select.select_by_value(value)
+            selenium_select.select_by_value(value)
+    except ElementException as ex:
+        raise
     except Exception as ex:
-        log_fail(onu, f"No se pudo seleccionar la VLAN target '{target_text}': {ex}")
-        logger.error(f"No se pudo seleccionar la VLAN target '{target_text}': {ex}")
-        return False
+        raise ElementException(f"No se pudo seleccionar la VLAN target '{target_text}': {ex}")
 
-    logger.info(f"ONU {onu} - Seleccionada VLAN target '{target_text}'")
+
+    logger.info(f"ONU {onu} - VLAN target seleccionada '{target_text}'")
 
     # 11) Click en Save y esperar confirmación (si corresponde)
     save_locator = (By.XPATH, "//a[@id='submitUpdateSpeedProfiles' or contains(@class,'submitUpdateSpeedProfiles') or normalize-space(.)='Save']")
-    if not safe_click(driver, save_locator, timeout=6):
-        log_fail(onu, "No se pudo hacer click en Save.")
-        logger.error("No se pudo hacer click en Save.")
-        return False
-
-    # 12) Opcional: esperar a que la modal se cierre / que termine la operación
-    # Esperar a que la modal desaparezca
-    #CONTINUAR AQUI, NO FUNCIONA
-    wait_until(driver, modal_closed, timeout=10)
+    try:
+        safe_click(driver, save_locator, timeout=6)
+    except Exception:
+        raise ElementException(f"No se pudo hacer click en Save")
     
-    logger.info(f"ONU {onu} VLAN migrada correctamente: {current_text} -> {target_text}")
-    log_success(onu)
-    input("LLegamos hasta el final")
+    # 12) Esperar a que la modal se cierre
+    wait_modal_closed(driver, modal, timeout=10)
+    
+    logger.info(f"ONU {onu} VLAN migrada correctamente: {vlan_select_current_text} -> {target_text}")
+
     return True
 
 # TODO: agregar migrate_vlan(driver), reboot_onu(driver), etc. cuando tengamos los selectores exactos.

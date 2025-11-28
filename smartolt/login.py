@@ -3,13 +3,11 @@ from selenium.common.exceptions import TimeoutException
 from utils.helpers import wait_visible, wait_clickable
 from utils.logger import get_logger
 import time
+from data import URL
 
 logger = get_logger(__name__)
 
-from data import URL
-
 def login_smartolt(driver, user, password, timeout=15):
-
     driver.get(URL)
 
     try:

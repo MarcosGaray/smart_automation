@@ -2,26 +2,46 @@ import logging
 import os
 from logging import Logger
 from colorama import Fore, Style, init as colorama_init
+from datetime import datetime
 
 colorama_init(autoreset=True)
 
-LOG_FILE = "automation.log"
+# Folder donde se guardan los logs
+LOG_FOLDER = "logs"
+
+# Usamos fecha + hora sin ":" para Windows
+timestamp = datetime.now().strftime("%Y-%m-%d__%H-%M-%S")
+LOG_FILE = os.path.join(LOG_FOLDER, f"migration_{timestamp}.log")
+
+
+def ensure_log_folder():
+    if not os.path.exists(LOG_FOLDER):
+        os.makedirs(LOG_FOLDER)
+
 
 def get_logger(name: str = "automation") -> Logger:
+    ensure_log_folder()
+
     logger = logging.getLogger(name)
     if logger.handlers:
-        return logger  # ya configurado
+        return logger  # Ya está configurado
 
     logger.setLevel(logging.DEBUG)
 
-    # File handler (DEBUG+)
+    # ----------------------------------------
+    # File Handler (DEBUG+)
+    # ----------------------------------------
     fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
     fh.setLevel(logging.DEBUG)
-    fh_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
+    fh_formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
+    )
     fh.setFormatter(fh_formatter)
     logger.addHandler(fh)
 
-    # Console handler (INFO+), con colores simples
+    # ----------------------------------------
+    # Console Handler (INFO+) con color
+    # ----------------------------------------
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
 

@@ -6,6 +6,7 @@ from smartolt.onu_actions import reveal_pppoe_username
 from selenium.common.exceptions import StaleElementReferenceException
 import time
 from exceptions import ElementException
+from data import CONFIGURED_URL
 
 logger = get_logger(__name__)
 
@@ -24,8 +25,13 @@ def go_to_configured_tab(driver, timeout=10):
     except Exception as e:
         raise ElementException(f"No se pudo clicar en Configured: {e}")
 
-
-
+def go_to_configured_by_URL(driver):
+    try:
+        driver.get(CONFIGURED_URL)
+        wait_visible(driver, (By.XPATH, "//table[contains(@class,'table')]",), timeout=10)
+    except Exception as e:
+        raise ElementException(f"No se pudo acceder a Configured con la URL")
+    
 def search_user(driver, user, timeout=10):
     locator = (By.XPATH, "//*[@id='free_text' or @name='free_text' or contains(@placeholder,'Search')]")
 
@@ -61,7 +67,7 @@ def search_user(driver, user, timeout=10):
     return True
 
 
-def go_back(driver, locator, timeout=10):
+def go_back(driver, locator=(By.XPATH, "//tr[contains(@class, 'valign-center')]"), timeout=10):
     driver.back()
     # Espera a que el DOM deje de cambiar (clave para SmartOLT)
     WebDriverWait(driver, timeout).until(
@@ -104,7 +110,7 @@ def open_matching_result(driver, expected_onu, timeout=10):
         # No coincide → volver atrás
         logger.info("No coincide. Regresando...")
 
-        go_back(driver, (By.XPATH, "//tr[contains(@class, 'valign-center')]"))
+        go_back(driver)
 
     # Se recorrieron todas las filas
     logger.info("No se encontró coincidencia exacta.")

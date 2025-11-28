@@ -1,13 +1,11 @@
 from selenium.webdriver.common.by import By
 from driver_setup import start_driver
 from smartolt.login import login_smartolt
-from smartolt.navigate import go_to_configured_tab, search_user, open_matching_result
+from smartolt.navigate import go_to_configured_tab, search_user, open_matching_result, go_back, go_to_configured_by_URL
 from sheets.sheets_reader import load_onu_list
 from sheets.sheets_writer import log_success, log_fail, save_unprocessed
 from utils.logger import get_logger
-from utils.helpers import wait_visible
 from smartolt.onu_actions import migrate_vlan
-from smartolt.navigate import go_back
 from data import USER, PASSWORD, INPUT_ONUS_FILE
 import pdb
 from exceptions import ElementException
@@ -54,6 +52,8 @@ def main():
 
     # PROCESAR ONUs
     for onu in onu_list:
+        print('')
+        print('---------------------------------------------------------')
         logger.info(f"Procesando {onu} ...")
         try:
             search_user(driver, onu)
@@ -68,9 +68,9 @@ def main():
                     logger.info(f"ÉXITO: {onu}")
                 else:
                     log_fail(onu, "Fallo en la migración")
-                    logger.warning(f"FALLO: {onu}") 
-
-                go_back(driver,(By.XPATH, "//tr[contains(@class, 'valign-center')]"))
+                    logger.warning(f"FALLO: {onu}")
+                
+                #go_back(driver)
                 #pdb.set_trace()
             else:
                 log_fail(onu, "Sin coincidencia exacta")
@@ -78,8 +78,14 @@ def main():
 
         except Exception as e:
             short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
-            log_fail(onu, f"Error inesperado: {short_msg}")
+            log_fail(onu, f"{short_msg}")
             logger.error(f"ERROR {onu}: {e}")
+        
+        try:
+            go_to_configured_by_URL(driver)
+        except Exception as e:
+            logger.error(f"No se pudo volver a Configured: {e}")
+            break
 
     # EXPORTAR RESTANTES SIEMPRE
     save_unprocessed(list(no_procesados))

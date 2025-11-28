@@ -25,8 +25,8 @@ chromedriver.exe
 data.py
 
 # Logs
-automation.log
-
+logs
+!logs/.keep
 # Sheets outputs
 
 # Ignorar contenido de sheets/input y sheets/output
