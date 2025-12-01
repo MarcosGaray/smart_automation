@@ -1,7 +1,9 @@
-# smartolt/connectivity.py
 from utils.helpers import wait_visible
 from selenium.webdriver.common.by import By
 from utils.logger import get_logger
+from sheets.sheets_reader import load_check_connection_list
+from sheets.sheets_writer import log_connection_success, log_connection_fail
+from exceptions import ElementException, Disconnected_ONU_Exception, ConnectionValidationException
 
 logger = get_logger(__name__)
 
@@ -24,3 +26,30 @@ def open_tr069_and_check_ppp(driver, timeout=8):
         return status_text
     except Exception:
         return None
+
+
+def start_connection_validation(driver):
+    logger.info("Iniciando validación de conexión...")
+    try:
+        onu_list= load_check_connection_list()
+        import pdb
+        """ pdb.set_trace() """
+        for onu_data in onu_list:
+            onu_username = onu_data[0]
+            onu_url = onu_data[1]
+            print(onu_username)
+            print(onu_url)
+
+            driver.get(onu_url)
+            log_connection_success(onu_username)
+            log_connection_fail(onu_username)
+
+    except Exception:  
+        raise ConnectionValidationException(f"No se pudo leer archivo de entrada")
+    
+    input('llegamos aqui')
+
+    """ for onu in onu_list:
+        status = open_tr069_and_check_ppp(driver)
+        if status == 'disconnected':
+            raise Disconnected_ONU_Exception(f"ONU {onu} desconectada") """

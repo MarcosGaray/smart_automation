@@ -3,12 +3,13 @@ from driver_setup import start_driver
 from smartolt.login import login_smartolt
 from smartolt.navigate import go_to_configured_tab, search_user, open_matching_result, go_back, go_to_configured_by_URL
 from sheets.sheets_reader import load_onu_list
-from sheets.sheets_writer import log_success, log_fail, save_unprocessed
+from sheets.sheets_writer import log_migration_success, log_fail, save_unprocessed,log_disconected_success
 from utils.logger import get_logger
 from smartolt.onu_actions import migrate_vlan
 from data import USER, PASSWORD, INPUT_ONUS_FILE
 import pdb
-from exceptions import ElementException
+from exceptions import ElementException,Disconnected_ONU_Exception,ConnectionValidationException
+from smartolt.connectivity import start_connection_validation
 
 logger = get_logger(__name__)
 
@@ -49,11 +50,28 @@ def main():
         save_unprocessed(list(no_procesados))
         return
         
+    success_account = 0
 
     # PROCESAR ONUs
     for onu in onu_list:
+        if success_account == 1:
+            print('')
+            print('---------------------------------------------------------')
+            success_account = 0
+            try:
+                start_connection_validation(driver)
+            except ConnectionValidationException as e:
+                logger.error(str(e))
+            except Exception as e:
+                logger.error(f"Error en validación de conexión: {e}")
+        else:
+            logger.info(f"Faltan {10 - success_account} ONUs para iniciar checkeo de conectividad")
+        
+        go_to_configured_by_URL(driver)
+        
         print('')
         print('---------------------------------------------------------')
+
         logger.info(f"Procesando {onu} ...")
         try:
             search_user(driver, onu)
@@ -63,19 +81,21 @@ def main():
             if matched:
                 migrated = migrate_vlan(driver, onu)
                 if migrated:
-                    log_success(onu)
+                    current_url = driver.current_url
+                    log_migration_success(onu,current_url)
+                    logger.info(f"ÉXITO: {onu}. Lista para checkear conectividad")
                     no_procesados.discard(onu)  # <<< ✔ quitar procesado
-                    logger.info(f"ÉXITO: {onu}")
+                    success_account += 1
                 else:
                     log_fail(onu, "Fallo en la migración")
                     logger.warning(f"FALLO: {onu}")
-                
-                #go_back(driver)
-                #pdb.set_trace()
             else:
                 log_fail(onu, "Sin coincidencia exacta")
                 logger.warning(f"FALLO: {onu}")
-
+        except Disconnected_ONU_Exception as e:
+            log_disconected_success(onu, str(e))
+            logger.info(f"ÉXITO: {onu}. "+ str(e))
+            no_procesados.discard(onu)  # <<< ✔ quitar procesado
         except Exception as e:
             short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
             log_fail(onu, f"{short_msg}")

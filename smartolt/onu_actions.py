@@ -1,10 +1,11 @@
 from selenium.webdriver.common.by import By
 from utils.helpers import wait_until, wait_visible, wait_clickable, find_in,wait_presence, wait_clickable, safe_click
 from utils.logger import get_logger
-from sheets.sheets_writer import log_success, log_fail, save_unprocessed
+from sheets.sheets_writer import log_migration_success, log_fail, save_unprocessed
 import pdb
 from data import VLAN_MIGRATION_DICT
-from exceptions import ElementException
+from exceptions import ElementException, Disconnected_ONU_Exception, SVLANException
+import time
 
 logger = get_logger(__name__)
 
@@ -45,6 +46,7 @@ def reveal_pppoe_username(driver, timeout=8):
 ##ACCIONES/INTERACCIONES
 # Obtiene el status de la ONU (online, disconnected, etc.)
 def get_onu_status(driver, timeout=8):
+    time.sleep(3)
     element_status = wait_visible(driver, (By.XPATH, "//dd[@id='onu_status_wrapper']"), timeout=timeout)
     return element_status.get_attribute("innerText").strip()
 
@@ -113,7 +115,7 @@ def get_select_target_option(selenium_select, target_text):
 
     return select_target_option
 
-def wait_modal_closed(driver, modal, timeout=10):
+def wait_modal_closed(driver, modal, timeout=60):
     from selenium.common.exceptions import StaleElementReferenceException
     def is_closed(_):
         try:
@@ -133,16 +135,10 @@ def wait_modal_closed(driver, modal, timeout=10):
             return True
 
     wait_until(driver, is_closed, timeout=timeout)
+    
 
 
 def migrate_vlan(driver, onu, timeout=8):
-    # 1) Verificar estado
-    try:
-        onu_status = get_onu_status(driver, timeout=timeout)    
-        expected_status = 'Online'
-    except Exception as ex:
-        raise ElementException(f"Error al obtener el estado de la ONU")
-    
     # 2) Abrir modal Configure
     # 3) Esperar a que la modal esté presente y visible (manejar animación)
     try:
@@ -165,7 +161,7 @@ def migrate_vlan(driver, onu, timeout=8):
 
     logger.info(f"ONU {onu} - VLAN actual (texto): '{vlan_select_current_text}'")
 
-    # 7) Verificar si la VLAN actual está en el mapa
+    # 7) Verificar si la VLAN actual está en el diccionario
     if not is_vlan_in_migration_dictionary(vlan_select_current_text, VLAN_MIGRATION_DICT):
         raise ElementException(f"VLAN actual '{vlan_select_current_text}' no está en el diccionario de migración")
 
@@ -202,10 +198,126 @@ def migrate_vlan(driver, onu, timeout=8):
         raise ElementException(f"No se pudo hacer click en Save")
     
     # 12) Esperar a que la modal se cierre
-    wait_modal_closed(driver, modal, timeout=10)
+    try:
+        wait_modal_closed(driver, modal)
+    except Exception:
+        raise ElementException("No se pudo cerrar la ventana modal de configuración")
     
+    # 13) Revisar el estado de la ONU
+    expected_status = 'Online'
+    try:
+        #pdb.set_trace()
+        onu_status = get_onu_status(driver, timeout=timeout)    
+    except Exception as ex:
+        raise ElementException(f"Error al obtener el estado de la ONU")
+
+    if not onu_status.__contains__(expected_status):
+        raise Disconnected_ONU_Exception("La ONU no se encuentra Online. Reboot innecesario. Migración Exitosa!")
+    
+    # 14) Hacer resync
+    """  try:
+        resync_onu_config(driver, timeout=60)
+    except Exception as ex:
+        raise
+    
+    logger.info(f"ONU {onu} Resync exitoso") """
+    
+    # 15) Hacer Reboot
+    try:
+        reboot_onu(driver, timeout=8)
+    except Exception as ex:
+        raise
+
+    logger.info(f"ONU {onu} Reboot iniciado")
     logger.info(f"ONU {onu} VLAN migrada correctamente: {vlan_select_current_text} -> {target_text}")
 
     return True
 
-# TODO: agregar migrate_vlan(driver), reboot_onu(driver), etc. cuando tengamos los selectores exactos.
+#resync_onu_config(driver)
+def resync_onu_config(driver,timeout=60):
+    resync_locator = (By.XPATH, "//a[@id='rebuildModal' or normalize-space(.)='Resync config']")
+    try:
+        safe_click(driver, resync_locator, timeout=6)
+
+        # Esperar que abra la modal
+        resync_modal = get_resync_modal(driver)
+
+        # Click en resync
+        confirm_resync_locator = (By.XPATH, "//div[@id='rebuildModal']//a[contains(normalize-space(),'Resync config') and contains(@class,'btn-yellow')]")
+        try:
+            safe_click(driver, confirm_resync_locator, timeout=10)
+        except Exception:
+            raise ElementException(f"No se pudo hacer click en confirmar resync")
+
+        # Esperar a que cierre la modal de resync
+        try:
+            wait_modal_closed(driver, resync_modal, timeout=120)   
+        except Exception:
+            raise ElementException(f"No se pudo cerrar la ventana modal de resync")
+    except ElementException:
+        raise
+    except Exception:
+        raise ElementException(f"No se pudo hacer click en Resync config")
+    
+
+def get_resync_modal(driver, timeout=10):
+    modal_locators = [
+        (By.XPATH, "//div[@id='rebuildModal' and contains(@class,'in')]"),
+        (By.XPATH, "//div[contains(@class,'modal') and not(contains(@style,'display: none'))]"),
+    ]
+
+    modal = None
+    for loc in modal_locators:
+        try:
+            modal = wait_visible(driver, loc, timeout=timeout)
+            break
+        except Exception:
+            continue
+
+    if modal is None:
+        raise ElementException("No apareció la ventana modal de resync (posible animación/carga).")
+    return modal
+
+#reboot_onu(driver)
+def reboot_onu(driver,timeout=10):
+    reboot_locator = (By.XPATH, "//a[@id='rebootModal' or normalize-space(.)='Reboot']")
+    try:
+        safe_click(driver, reboot_locator, timeout=6)
+
+        # Esperar queabra la modal
+        reboot_modal = get_reboot_modal(driver)
+
+        # Click en reboot
+        confirm_reboot_locator = (By.XPATH, "//div[@id='rebootModal']//a[contains(normalize-space(),'Reboot') and contains(@class,'btn-warning')]")
+        try:
+            safe_click(driver, confirm_reboot_locator, timeout=10)
+        except Exception:
+            raise ElementException(f"No se pudo hacer click en confirmar reboot")
+
+        # Esperar a que cierre la modal de reboot
+        try:
+            wait_modal_closed(driver, reboot_modal, timeout=30)   
+        except Exception:
+            raise ElementException("No se pudo cerrar la ventana modal de reboot")
+    except ElementException:
+        raise
+    except Exception:
+        raise ElementException(f"No se pudo hacer click en Reboot")
+    
+def get_reboot_modal(driver, timeout=10):
+    modal_locators = [
+        (By.XPATH, "//div[@id='rebootModal' and contains(@class,'in')]"),
+        (By.XPATH, "//div[contains(@class,'modal') and not(contains(@style,'display: none'))]"),
+    ]
+
+    modal = None
+    for loc in modal_locators:
+        try:
+            modal = wait_visible(driver, loc, timeout=timeout)
+            break
+        except Exception:
+            continue
+
+    if modal is None:
+        raise ElementException("No apareció la ventana modal de reboot (posible animación/carga).")
+    return modal
