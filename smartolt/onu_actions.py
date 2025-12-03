@@ -199,7 +199,7 @@ def migrate_vlan(driver, onu, timeout=8):
     # 8) Checkear si tiene SVLAN-ID
     try:
         svlan_wrapper_locator = (By.XPATH, "//div[@id='svlan_controls_wrapper']")
-        svlan_id = check_svlan_id(driver, svlan_wrapper_locator, timeout=timeout)
+        use_svlan = check_svlan_id(driver, svlan_wrapper_locator, timeout=timeout)
     except ElementException:
         raise
     except Exception:
@@ -209,7 +209,7 @@ def migrate_vlan(driver, onu, timeout=8):
     # 9) Si actual == target → ya migrada
     if vlan_select_current_text == target_text:
         logger.info(f"ONU {onu} ya estaba en target VLAN '{target_text}'")
-        return True,is_online, svlan_id
+        return True,is_online, use_svlan
 
     # 10) Buscar la opción cuyo texto coincida con target_text y seleccionar
     try:
@@ -267,7 +267,7 @@ def migrate_vlan(driver, onu, timeout=8):
     logger.info(f"ONU {onu} Reboot iniciado")
     logger.info(f"ONU {onu} VLAN migrada correctamente: {vlan_select_current_text} -> {target_text}")
 
-    return True, is_online ,svlan_id
+    return True, is_online ,use_svlan
 
 #resync_onu_config(driver)
 def resync_onu_config(driver,timeout=60):
