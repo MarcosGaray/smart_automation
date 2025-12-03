@@ -79,11 +79,18 @@ def main():
             matched = open_matching_result(driver, onu)
 
             if matched:
-                migrated = migrate_vlan(driver, onu)
+                migrated, is_online, use_svlan = migrate_vlan(driver, onu)
+                print(use_svlan)
                 if migrated:
+                    # comprobar comportamiento de use_vlan
+                    # if use_svlan: log_check_svlan_success(onu)
                     current_url = driver.current_url
-                    log_migration_success(onu,current_url)
-                    logger.info(f"ÉXITO: {onu}. Lista para checkear conectividad")
+                    if is_online:
+                        log_migration_success(onu,current_url)
+                        logger.info(f"ÉXITO: {onu}. Lista para checkear conectividad")
+                    else:
+                        log_disconected_success(onu, "La ONU no se encuentra Online. Reboot innecesario. Migración Exitosa!")
+                        logger.info(f"ÉXITO: {onu}. La ONU no se encuentra Online. Reboot innecesario. Migración Exitosa!")
                     no_procesados.discard(onu)  # <<< ✔ quitar procesado
                     success_account += 1
                 else:
@@ -92,10 +99,6 @@ def main():
             else:
                 log_fail(onu, "Sin coincidencia exacta")
                 logger.warning(f"FALLO: {onu}")
-        except Disconnected_ONU_Exception as e:
-            log_disconected_success(onu, str(e))
-            logger.info(f"ÉXITO: {onu}. "+ str(e))
-            no_procesados.discard(onu)  # <<< ✔ quitar procesado
         except Exception as e:
             short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
             log_fail(onu, f"{short_msg}")

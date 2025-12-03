@@ -136,9 +136,40 @@ def wait_modal_closed(driver, modal, timeout=60):
 
     wait_until(driver, is_closed, timeout=timeout)
     
+def check_svlan_id(driver, svlan_wrapper_locator, timeout=8):
+    """
+    Devuelve True si la ONU está usando SVLAN-ID.
+    Devuelve False si el div está en display:none (SVLAN no usado).
+    """
+
+    try:
+        wrapper = wait_presence(driver, svlan_wrapper_locator, timeout=timeout)
+    except Exception:
+        raise ElementException("No se encontró el contenedor svlan_controls_wrapper")
+
+    style = wrapper.get_attribute("style") or ""
+
+    # Si contiene display:none → no usa svlan
+    if "display: none" in style.replace(" ", "").lower():
+        return False
+
+    # Visible → usa svlan
+    return True
 
 
 def migrate_vlan(driver, onu, timeout=8):
+    # 1) Revisar el estado de la ONU
+    expected_status = 'Online'
+    is_online = True
+    try:
+        #pdb.set_trace()
+        onu_status = get_onu_status(driver, timeout=timeout)    
+    except Exception as ex:
+        raise ElementException(f"Error al obtener el estado de la ONU")
+
+    if not onu_status.__contains__(expected_status):
+        is_online = False
+
     # 2) Abrir modal Configure
     # 3) Esperar a que la modal esté presente y visible (manejar animación)
     try:
@@ -165,14 +196,22 @@ def migrate_vlan(driver, onu, timeout=8):
     if not is_vlan_in_migration_dictionary(vlan_select_current_text, VLAN_MIGRATION_DICT):
         raise ElementException(f"VLAN actual '{vlan_select_current_text}' no está en el diccionario de migración")
 
+    # 8) Checkear si tiene SVLAN-ID
+    try:
+        svlan_wrapper_locator = (By.XPATH, "//div[@id='svlan_controls_wrapper']")
+        svlan_id = check_svlan_id(driver, svlan_wrapper_locator, timeout=timeout)
+    except ElementException:
+        raise
+    except Exception:
+        raise ElementException("Error detectando si la ONU usa SVLAN-ID")
 
     target_text = VLAN_MIGRATION_DICT[vlan_select_current_text]
-    # 8) Si actual == target → ya migrada
+    # 9) Si actual == target → ya migrada
     if vlan_select_current_text == target_text:
         logger.info(f"ONU {onu} ya estaba en target VLAN '{target_text}'")
-        return True
+        return True,is_online, svlan_id
 
-    # 9) Buscar la opción cuyo texto coincida con target_text y seleccionar
+    # 10) Buscar la opción cuyo texto coincida con target_text y seleccionar
     try:
         target_option = get_select_target_option(selenium_select, target_text)
         try:
@@ -190,6 +229,7 @@ def migrate_vlan(driver, onu, timeout=8):
 
     logger.info(f"ONU {onu} - VLAN target seleccionada '{target_text}'")
 
+
     # 11) Click en Save y esperar confirmación (si corresponde)
     save_locator = (By.XPATH, "//a[@id='submitUpdateSpeedProfiles' or contains(@class,'submitUpdateSpeedProfiles') or normalize-space(.)='Save']")
     try:
@@ -203,16 +243,12 @@ def migrate_vlan(driver, onu, timeout=8):
     except Exception:
         raise ElementException("No se pudo cerrar la ventana modal de configuración")
     
-    # 13) Revisar el estado de la ONU
-    expected_status = 'Online'
-    try:
-        #pdb.set_trace()
-        onu_status = get_onu_status(driver, timeout=timeout)    
-    except Exception as ex:
-        raise ElementException(f"Error al obtener el estado de la ONU")
+    
 
-    if not onu_status.__contains__(expected_status):
-        raise Disconnected_ONU_Exception("La ONU no se encuentra Online. Reboot innecesario. Migración Exitosa!")
+    if is_online == False:
+        logger.info(f"ONU {onu} no se encuentra Online. Reboot innecesario. Migración Exitosa!")
+        #En vez de excepcion implementear devolucion de otra variable.. return True, online, svlan_id
+        #raise Disconnected_ONU_Exception("La ONU no se encuentra Online. Reboot innecesario. Migración Exitosa!")
     
     # 14) Hacer resync
     """  try:
@@ -231,7 +267,7 @@ def migrate_vlan(driver, onu, timeout=8):
     logger.info(f"ONU {onu} Reboot iniciado")
     logger.info(f"ONU {onu} VLAN migrada correctamente: {vlan_select_current_text} -> {target_text}")
 
-    return True
+    return True, is_online ,svlan_id
 
 #resync_onu_config(driver)
 def resync_onu_config(driver,timeout=60):
