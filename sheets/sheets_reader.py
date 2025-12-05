@@ -25,7 +25,7 @@ def load_onu_list(path="sheets/input/onus.txt"):
 
 def load_check_connection_list(path=None):
     if path is None:
-        path = os.path.join(OUTPUT_FOLDER, "migration_success.csv")
+        path = os.path.join(OUTPUT_FOLDER, "migration-success.csv")
 
     if not os.path.exists(path):
         raise FileNotFoundError(f"No existe el archivo: {path}")
@@ -42,6 +42,32 @@ def load_check_connection_list(path=None):
     # Limpiar espacios
     df["username"] = df["username"].str.strip()
     df["url"] = df["url"].str.strip()
+
+    # Devolver lista de tuplas
+    return list(df[["username", "url"]].itertuples(index=False, name=None))
+
+
+def load_debbuggin_check_connection_list(path="sheets/input/debbuggin-connection-onus.txt"):
+    if path is None:
+        path = os.path.join(OUTPUT_FOLDER, "migration-success.csv")
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"No existe el archivo: {path}")
+
+    ext = os.path.splitext(path)[1].lower()
+
+    if ext in [".txt", ".csv"]:
+        df = pd.read_csv(
+            path,
+            sep=",",
+            engine="python",
+            encoding="utf-8-sig",
+            header=None,
+            names=["username", "url"],
+            dtype=str
+        )
+    else:
+        raise ValueError("Formato no soportado. Usa TXT o CSV.")
 
     # Devolver lista de tuplas
     return list(df[["username", "url"]].itertuples(index=False, name=None))

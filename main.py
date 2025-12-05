@@ -3,7 +3,7 @@ from driver_setup import start_driver
 from smartolt.login import login_smartolt
 from smartolt.navigate import go_to_configured_tab, search_user, open_matching_result, go_back, go_to_configured_by_URL
 from sheets.sheets_reader import load_onu_list
-from sheets.sheets_writer import log_migration_success, log_fail, save_unprocessed,log_disconected_success
+from sheets.sheets_writer import log_migration_success, log_fail, save_unprocessed,log_disconected_success, log_check_svlan_success, backup_success_block
 from utils.logger import get_logger
 from smartolt.onu_actions import migrate_vlan
 from data import USER, PASSWORD, INPUT_ONUS_FILE
@@ -44,33 +44,20 @@ def main():
 
     try:
         go_to_configured_tab(driver)
-    except ElementException as elemExc:
-        logger.warning(f"Abortando. {elemExc}")
-        driver.quit()
+    except ElementException as e:
+        logger.warning(f"Abortando. {e}")
         save_unprocessed(list(no_procesados))
+        driver.quit()
         return
         
     success_account = 0
+    MAX_ONUS_ACCOUNT = 20
+    block_number = 1   # <<< CONTADOR DE BLOQUES DE BACKUP
 
     # PROCESAR ONUs
-    for onu in onu_list:
-        if success_account == 1:
-            print('')
-            print('---------------------------------------------------------')
-            success_account = 0
-            try:
-                start_connection_validation(driver)
-            except ConnectionValidationException as e:
-                logger.error(str(e))
-            except Exception as e:
-                logger.error(f"Error en validación de conexión: {e}")
-        else:
-            logger.info(f"Faltan {10 - success_account} ONUs para iniciar checkeo de conectividad")
-        
-        go_to_configured_by_URL(driver)
-        
-        print('')
-        print('---------------------------------------------------------')
+    for onu in onu_list:        
+        logger.info('')
+        logger.info('---------------------------------------------------------')
 
         logger.info(f"Procesando {onu} ...")
         try:
@@ -80,24 +67,36 @@ def main():
 
             if matched:
                 migrated, is_online, use_svlan = migrate_vlan(driver, onu)
-                print(use_svlan)
+                logger.info(f'"{onu}" - Migrated: {migrated} - Is Online: {is_online} - Usa svlan: {use_svlan}')
                 if migrated:
-                    # comprobar comportamiento de use_vlan
-                    # if use_svlan: log_check_svlan_success(onu)
-                    current_url = driver.current_url
-                    if is_online:
-                        log_migration_success(onu,current_url)
-                        logger.info(f"ÉXITO: {onu}. Lista para checkear conectividad")
-                    else:
-                        log_disconected_success(onu, "La ONU no se encuentra Online. Reboot innecesario. Migración Exitosa!")
-                        logger.info(f"ÉXITO: {onu}. La ONU no se encuentra Online. Reboot innecesario. Migración Exitosa!")
                     no_procesados.discard(onu)  # <<< ✔ quitar procesado
-                    success_account += 1
+
+                    if use_svlan: 
+                        log_check_svlan_success(onu)
+                        logger.warning("La ONU posee SVLAN. Revisar a mano.")
+                    else:
+                        logger.info("La ONU no posee SVLAN. Migración Exitosa!")
+                        
+                    current_onu_url = driver.current_url
+                    if is_online:
+                        log_migration_success(onu,current_onu_url)
+                        logger.info(f"ÉXITO: {onu}. Lista para checkear conectividad")
+                        success_account += 1
+
+                        # <<< CHECKEO DE CONECTIVIDAD
+                        if success_account >= MAX_ONUS_ACCOUNT:
+                            block_number = excecute_connection_validation_block(driver, block_number)
+                            success_account = 0
+                        else:
+                            logger.info(f"Faltan {MAX_ONUS_ACCOUNT - success_account} ONUs para iniciar checkeo de conectividad")
+                    else:
+                        log_disconected_success(onu, "ONU Offline")
+                        logger.info(f"ÉXITO: {onu}. La ONU no se encuentra Online. Reboot innecesario. Migración Exitosa!")
                 else:
                     log_fail(onu, "Fallo en la migración")
                     logger.warning(f"FALLO: {onu}")
             else:
-                log_fail(onu, "Sin coincidencia exacta")
+                log_fail(onu, "Sin coincidencia exacta en resultados del SMARTOLT")
                 logger.warning(f"FALLO: {onu}")
         except Exception as e:
             short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
@@ -110,6 +109,14 @@ def main():
             logger.error(f"No se pudo volver a Configured: {e}")
             break
 
+    
+    print('---------------------------------------------------------')
+    logger.info("Se finaliza procesamiento. Se checkean las ONUs restantes si es que quedan")
+
+    if success_account > 0:
+        logger.info(f"Faltan {MAX_ONUS_ACCOUNT - success_account} ONUs para procesar. Comenzando...")
+        block_number = excecute_connection_validation_block(driver, block_number)
+
     # EXPORTAR RESTANTES SIEMPRE
     save_unprocessed(list(no_procesados))
     logger.info("Proceso finalizado. Archivo sheets/output/no_procesados.csv creado.")
@@ -117,6 +124,29 @@ def main():
     input("ENTER para cerrar...")
     driver.quit()
 
+
+def excecute_connection_validation_block(driver, block_number):
+    print('')
+    print('---------------------------------------------------------')
+    
+    #Excepciones manejadas internamente
+    try:
+        start_connection_validation(driver)
+        # Si todo va bien, se debe crearse una subcarpeta en output llamada "processed-blocks-backup" y copiar los renglones de migration-success.csv en un nuevo archivo "migration-success-block-{numero_de_bloque}.csv"
+
+        if backup_success_block(block_number):
+            logger.info(f"Backup creado: migration-success-block-{block_number}.csv")
+        else:
+            logger.warning("No se pudo crear backup: migration-success.csv no existe")
+
+        return block_number + 1 
+    
+    except ConnectionValidationException as e:
+        logger.error(str(e))
+    except Exception as e:
+        logger.error(f"Error inesperado en la validación de conexión: {e}")
+    
+    return block_number
 
 if __name__ == "__main__":
     main()

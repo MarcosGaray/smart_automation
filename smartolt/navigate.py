@@ -1,6 +1,6 @@
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from utils.helpers import wait_clickable, wait_visible, wait_presence
+from utils.helpers import wait_clickable, wait_visible
 from utils.logger import get_logger
 from smartolt.onu_actions import reveal_pppoe_username
 from selenium.common.exceptions import StaleElementReferenceException
@@ -32,10 +32,10 @@ def go_to_configured_by_URL(driver):
     except Exception as e:
         raise ElementException(f"No se pudo acceder a Configured con la URL")
     
-def search_user(driver, user, timeout=10):
+def search_user(driver, onu_username, timeout=10):
     locator = (By.XPATH, "//*[@id='free_text' or @name='free_text' or contains(@placeholder,'Search')]")
 
-    logger.info(f"Search: {user}")
+    logger.info(f"Search: {onu_username}")
 
     def get_input():
         return wait_visible(driver, locator, timeout=timeout)
@@ -49,7 +49,7 @@ def search_user(driver, user, timeout=10):
 
             elif step == "send_keys":
                 input_el.clear()  # extra seguridad
-                input_el.send_keys(user)
+                input_el.send_keys(onu_username)
                 input_el.send_keys("\n")
 
         except StaleElementReferenceException:
@@ -60,10 +60,10 @@ def search_user(driver, user, timeout=10):
                 input_el.clear()
             elif step == "send_keys":
                 input_el.clear()
-                input_el.send_keys(user)
+                input_el.send_keys(onu_username)
                 input_el.send_keys("\n")
 
-    logger.info(f"Search executed for user: {user}")
+    logger.info(f"Search executed for user: {onu_username}")
     return True
 
 
@@ -113,5 +113,5 @@ def open_matching_result(driver, expected_onu, timeout=10):
         go_back(driver)
 
     # Se recorrieron todas las filas
-    logger.info("No se encontró coincidencia exacta.")
+    logger.info("Se recorrieron todas las filas. No se encontró coincidencia exacta.")
     return False
