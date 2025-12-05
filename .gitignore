@@ -23,6 +23,7 @@ chromedriver.exe
 
 # Credentials
 data.py
+finder.html
 
 # Logs
 logs
@@ -36,3 +37,4 @@ sheets/output/*
 # Pero mantener un placeholder vacío si existen
 !sheets/input/.keep
 !sheets/output/.keep
+

@@ -3,7 +3,7 @@ from driver_setup import start_driver
 from smartolt.login import login_smartolt
 from smartolt.navigate import go_to_configured_tab, search_user, open_matching_result, go_back, go_to_configured_by_URL
 from sheets.sheets_reader import load_onu_list
-from sheets.sheets_writer import log_migration_success, log_fail, save_unprocessed,log_disconected_success, log_check_svlan_success, backup_success_block
+from sheets.sheets_writer import log_migration_success, log_fail, log_disconected_success, log_check_svlan_success, backup_success_block,create_not_processed_temp, remove_from_not_processed_temp,rename_not_processed_temp
 from utils.logger import get_logger
 from smartolt.onu_actions import migrate_vlan
 from data import USER, PASSWORD, INPUT_ONUS_FILE
@@ -27,7 +27,7 @@ def main():
         return
 
     # INICIALIZAR no_procesados CON TODAS
-    no_procesados = set(onu_list)  # <<< ✔ importante ✔
+    create_not_processed_temp(onu_list)
 
     logger.info("Cargando webdriver...")
     driver = start_driver()
@@ -38,15 +38,15 @@ def main():
         logger.info("Sesión iniciada.")
     except Exception as e:
         logger.error(f"Error en login: {e}")
+        rename_not_processed_temp()
         driver.quit()
-        save_unprocessed(list(no_procesados))
         return
 
     try:
         go_to_configured_tab(driver)
     except ElementException as e:
         logger.warning(f"Abortando. {e}")
-        save_unprocessed(list(no_procesados))
+        rename_not_processed_temp()
         driver.quit()
         return
         
@@ -69,8 +69,7 @@ def main():
                 migrated, is_online, use_svlan = migrate_vlan(driver, onu)
                 logger.info(f'"{onu}" - Migrated: {migrated} - Is Online: {is_online} - Usa svlan: {use_svlan}')
                 if migrated:
-                    no_procesados.discard(onu)  # <<< ✔ quitar procesado
-
+                    remove_from_not_processed_temp(onu)
                     if use_svlan: 
                         log_check_svlan_success(onu)
                         logger.warning("La ONU posee SVLAN. Revisar a mano.")
@@ -83,7 +82,7 @@ def main():
                         logger.info(f"ÉXITO: {onu}. Lista para checkear conectividad")
                         success_account += 1
 
-                        # <<< CHECKEO DE CONECTIVIDAD
+                        # <<< CHECKEO DE CONECTIVIDAD POR BLOQUES
                         if success_account >= MAX_ONUS_ACCOUNT:
                             block_number = excecute_connection_validation_block(driver, block_number)
                             success_account = 0
@@ -110,15 +109,16 @@ def main():
             break
 
     
-    print('---------------------------------------------------------')
+    logger.info('---------------------------------------------------------')
     logger.info("Se finaliza procesamiento. Se checkean las ONUs restantes si es que quedan")
 
+    # CHECKEO FINAL SI QUEDARON <20 PENDIENTES
     if success_account > 0:
         logger.info(f"Faltan {MAX_ONUS_ACCOUNT - success_account} ONUs para procesar. Comenzando...")
         block_number = excecute_connection_validation_block(driver, block_number)
 
     # EXPORTAR RESTANTES SIEMPRE
-    save_unprocessed(list(no_procesados))
+    rename_not_processed_temp()
     logger.info("Proceso finalizado. Archivo sheets/output/no_procesados.csv creado.")
 
     input("ENTER para cerrar...")
@@ -126,8 +126,8 @@ def main():
 
 
 def excecute_connection_validation_block(driver, block_number):
-    print('')
-    print('---------------------------------------------------------')
+    logger.info('')
+    logger.info('---------------------------------------------------------')
     
     #Excepciones manejadas internamente
     try:

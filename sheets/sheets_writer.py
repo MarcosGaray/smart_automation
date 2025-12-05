@@ -13,6 +13,10 @@ def ensure_output_folder(path=None):
     if not os.path.exists(path):
         os.makedirs(path)
 
+# ================================
+# LOGS NORMALES
+# ================================
+
 def log_migration_success(username,url):
     ensure_output_folder()
     df = pd.DataFrame([{
@@ -74,11 +78,54 @@ def log_check_svlan_success(username):
     path = os.path.join(OUTPUT_SVLAN_FOLDER, "check-svlan.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
 
-def save_unprocessed(unprocessed_list):
+# ===========================================
+# MANEJO SEGURO DE NOT-PROCESSED 
+# ===========================================
+
+def create_not_processed_temp(unprocessed_list):
     ensure_output_folder()
+    
+    path = os.path.join(OUTPUT_FOLDER, "not-processed-temp.csv")
+    
+    if os.path.exists(path):
+        return
+    
     df = pd.DataFrame({"username": unprocessed_list})
-    path = os.path.join(OUTPUT_FOLDER, "not-processed.csv")
     df.to_csv(path, index=False)
+
+def remove_from_not_processed_temp(onu_username):
+    ensure_output_folder()
+
+    path = os.path.join(OUTPUT_FOLDER, "not-processed-temp.csv")
+
+    if not os.path.exists(path):
+        # No deberia pasar, pero en caso extremo lo recreamos vacío
+        pd.DataFrame({"username": []}).to_csv(path, index=False)
+        return
+
+    df = pd.read_csv(path)
+
+    new_df = df[df["username"] != onu_username]
+
+    # Guardado seguro (primero a archivo temporal, luego replace)
+    temp_path = path + ".swap"
+    new_df.to_csv(temp_path, index=False)
+    os.replace(temp_path, path)
+
+def rename_not_processed_temp():
+    ensure_output_folder()
+
+    temp_path = os.path.join(OUTPUT_FOLDER, "not-processed-temp.csv")
+    final_path = os.path.join(OUTPUT_FOLDER, "no_procesados.csv")
+
+    if not os.path.exists(temp_path):
+        return
+
+    os.replace(temp_path, final_path)
+
+# ===========================
+# BACKUP POR BLOQUES
+# ===========================
 
 def backup_success_block(block_number):
     """

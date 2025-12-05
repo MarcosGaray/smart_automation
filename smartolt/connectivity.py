@@ -30,7 +30,7 @@ def start_connection_validation(driver, onu_list = None, step = 1):
         # 1) Revisar el estado de la ONU
         expected_status = 'Online'
         try:
-            time.sleep(3)
+            time.sleep(5)
             onu_status = get_onu_status(driver)    
             logger.info("Estado de la ONU: " + onu_status)
         except Exception:
@@ -40,19 +40,31 @@ def start_connection_validation(driver, onu_list = None, step = 1):
 
         if not onu_status.__contains__(expected_status):
             if step <= 3:
+                logger.warning(f"ONU {onu_username} Offline. Se agrega a la lista de ONUs para reintentar")
                 check_again_onu_list.append(onu_data)
             else:
                 log_connection_fail(onu_username, "ONU Offline", onu_url)
                 logger.error(f"ERROR {onu_username}: ONU Offline")
-                continue
+            continue
 
         # open_tr069_and_check_ppp
         try:
             connection_status_text = open_tr069_and_check_ppp(driver)
         except Exception as e:
             short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
-            log_connection_fail(onu_username, f"{short_msg}", onu_url)
-            logger.error(f"ERROR {onu_username}: {e}")
+            if step <= 3:
+                logger.warning(f"ONU {onu_username} - {short_msg}. Se agrega a la lista de ONUs para reintentar")
+                check_again_onu_list.append(onu_data)
+            else:
+                # Hacer resync
+                try:
+                    log_connection_fail(onu_username, f"{short_msg}", onu_url)
+                    logger.error(f"ERROR {onu_username}: {e}")
+                    resync_onu_config(driver, timeout=60)
+                    logger.info(f"ONU {onu_username} Resync exitoso")
+                except Exception as ex:
+                    logger.error(f"Error al intentar resync de la ONU {onu_username}: {ex}")
+            
             continue
 
         if connection_status_text == 'connected':
@@ -75,7 +87,9 @@ def start_connection_validation(driver, onu_list = None, step = 1):
     if len(check_again_onu_list) > 0:
         start_connection_validation(driver, check_again_onu_list, step + 1)
 
-    print(f'Finalizado el step {step} de la validación de conexiones')
+    logger.info("---------------------------------------------------------")
+    logger.info(f'Finalizado el step {step} de la validación de conexiones')
+    logger.info("---------------------------------------------------------")
 
     
 
@@ -97,7 +111,7 @@ def open_ppp_interface_section(driver):
 
 def check_connection_status(driver):
     connection_status_span_locator = (By.XPATH, "//td[normalize-space()='Connection status']/following-sibling::td//span")
-
+    time.sleep(5)
     try:
         connection_status_span = wait_visible(driver, connection_status_span_locator)
         connection_status_text = connection_status_span.text.strip().lower()
@@ -106,6 +120,7 @@ def check_connection_status(driver):
     return connection_status_text
     
 def reset_ppp_connection(driver, timeout=60):
+    time.sleep(5)
     # 1) Localizador del combo "Reset connection"
     reset_select_locator = (By.XPATH,
         "//td[normalize-space()='Reset connection']/following-sibling::td//select"
