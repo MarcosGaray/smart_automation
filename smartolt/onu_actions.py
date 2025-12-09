@@ -148,7 +148,6 @@ def check_svlan_id(driver, timeout=2):
 
     return True
 
-
 def migrate_vlan(driver, onu, timeout=70):
     # Supuesto: ESTAMOS EN LA PAGINA DE CONFIGURACIÓN DE LA ONU
     # 1) Abrir modal de configuración
@@ -169,8 +168,18 @@ def migrate_vlan(driver, onu, timeout=70):
     except ElementException:
         raise
     
+    #5) Detectar ONU mode (Routing / Bridging)
+    """ PARTE DE EVALUAR BRIDGING MODE. DESCARTADO
+    try:
+        onu_mode = get_onu_mode(driver)
+        logger.info(f"ONU {onu} - mode detectado: {onu_mode}")
+    except ElementException:
+        raise
+    except Exception:
+        raise ElementException("Error inesperado detectando el mode de la ONU")
+    """
 
-    # 5) Checkear si tiene SVLAN-ID
+    # 6) Checkear si tiene SVLAN-ID
     try:
         use_svlan = check_svlan_id(driver) # True si tiene SVLAN-ID
     except ElementException:
@@ -180,13 +189,13 @@ def migrate_vlan(driver, onu, timeout=70):
     
     logger.info(f"ONU {onu} - VLAN actual (texto): '{current_selected_vlan_text}'")
 
-    # 6) Verificar si la VLAN actual está en el diccionario
+    # 7) Verificar si la VLAN actual está en el diccionario
     if not is_vlan_in_migration_dictionary(current_selected_vlan_text, VLAN_MIGRATION_DICT):
         raise ElementException(f"VLAN actual '{current_selected_vlan_text}' no está en el diccionario de migración")
 
     target_vlan_text = VLAN_MIGRATION_DICT[current_selected_vlan_text]
 
-    # 7) Revisar el estado de la ONU
+    # 8) Revisar el estado de la ONU
     expected_onu_status = 'Online'
     is_online = True
     try:
@@ -198,12 +207,12 @@ def migrate_vlan(driver, onu, timeout=70):
         is_online = False
 
 
-    # 8) Si vlan_actual == vlan_target → ya está migrada
+    # 9) Si vlan_actual == vlan_target → ya está migrada
     if current_selected_vlan_text == target_vlan_text:
         logger.info(f"ONU {onu} ya estaba en target VLAN '{target_vlan_text}'")
         return True,is_online, use_svlan
 
-    # 9) Buscar la opción cuyo texto coincida con target_text y seleccionar
+    # 10) Buscar la opción cuyo texto coincida con target_text y seleccionar
     try:
         vlan_target_option = get_select_target_option(selenium_select, target_vlan_text)
         try:
@@ -222,20 +231,37 @@ def migrate_vlan(driver, onu, timeout=70):
     logger.info(f"ONU {onu} - VLAN target seleccionada '{target_vlan_text}'")
 
 
-    # 10) Click en Save y esperar confirmación (si corresponde)
+    # 11) Click en Save y esperar confirmación (si corresponde)
     save_locator = (By.XPATH, "//a[@id='submitUpdateSpeedProfiles' or contains(@class,'submitUpdateSpeedProfiles') or normalize-space(.)='Save']")
     try:
         safe_click(driver, save_locator, timeout=6)
     except Exception:
         raise ElementException(f"No se pudo hacer click en Save")
     
-    # 11) Esperar a que la modal se cierre
+    # 12) Esperar a que la modal se cierre
     try:
         wait_modal_closed(driver, modal)
     except Exception:
         raise ElementException("No se pudo cerrar la ventana modal de configuración")
     
-    # 12) Determinar si hacer resync o no
+    # 13) ONU mode Routing -> continuar 
+    #     ONU mode Bridging -> Evaluar ETH Ports
+
+    """ PARTE DE EVALUAR BRIDGING MODE. DESCARTADO
+    if onu_mode.lower() == 'routing':
+        logger.info(f"ONU {onu} mode Routing, se continua sin evaluar ETH Ports")
+    else:
+        logger.info(f"ONU {onu} mode Bridging, se evalua ETH Ports")
+        try:
+            update_eth_ports_vlan(driver, target_vlan_text)
+            logger.info(f"Puertos Ethernet ajustados correctamente en modo Bridging.")
+        except ElementException as ex:
+            raise
+        except Exception as ex:
+            raise ElementException("Error inesperado ajustando los puertos Ethernet (modo Bridging)")
+    """
+
+    # 14) Determinar si hacer resync o no
     if is_online:
         # Hacer resync
         try:
@@ -351,3 +377,79 @@ def get_reboot_modal(driver, timeout=10):
     if modal is None:
         raise ElementException("No apareció la ventana modal de reboot (posible animación/carga).")
     return modal
+
+""" PARTE DE EVALUAR BRIDGING MODE. DESCARTADO
+
+def get_onu_mode(driver, timeout=6):
+    # Devuelve 'Routing' o 'Bridging' según el atributo data-mode.
+    locator = (By.XPATH, "//a[contains(@class,'update-mode')]")
+    try:
+        elem = wait_visible(driver, locator, timeout=timeout)
+        mode = elem.get_attribute("data-mode") or ""
+        return mode.strip()
+    except Exception:
+        raise ElementException("No se pudo detectar el ONU mode (Routing/Bridging).")
+
+def get_eth_port_configure_buttons(driver, timeout=6):
+    locator = (By.XPATH, "//a[contains(@class,'configure-vlan') and contains(@href,'#configureNetworkPort')]")
+    try:
+        eth_port_configure_buttons = driver.find_elements(*locator)
+        return eth_port_configure_buttons
+    except Exception:
+        raise ElementException("No se pudieron encontrar los botones Configure de los puertos Ethernet.")
+    
+def get_eth_port_modal(driver, timeout=6):
+
+    modal_locator = (By.XPATH, "//div[@id='configureNetworkPort']")
+    try:
+        modal = wait_visible(driver, modal_locator, timeout=timeout)
+        return modal
+    except Exception:
+        raise ElementException("No se pudo abrir la modal de configuración del puerto Ethernet.")
+    
+def get_eth_vlan_select(driver, timeout=4):
+    locator = (By.XPATH, "//div[@id='configureNetworkPort']//select[@name='vlan_id']")
+    try:
+        sel = wait_visible(driver, locator, timeout=timeout)
+        from selenium.webdriver.support.ui import Select
+        return Select(sel)
+    except Exception:
+        raise ElementException("No se encontró el selector VLAN-ID en la configuración del puerto Ethernet.")
+
+def update_eth_ports_vlan(driver, target_vlan_text):
+
+    eth_port_configure_buttons = get_eth_port_configure_buttons(driver)
+
+    if not eth_port_configure_buttons:
+        logger.info("No hay puertos Ethernet configurables.")
+        return True
+
+    for index, btn in enumerate(eth_port_configure_buttons, start=1):
+        try:
+            safe_click(driver, (By.XPATH, get_xpath_from_element(btn)))
+        except Exception:
+            btn.click()
+
+        modal = get_eth_port_modal(driver)
+
+        # Obtener selector VLAN-ID
+        try:
+            vlan_select = get_eth_vlan_select(driver)
+            current_option = vlan_select.first_selected_option.get_attribute("innerText").strip()
+        except Exception:
+            raise ElementException("No se pudo leer VLAN-ID del puerto Ethernet.")
+
+        if current_option != target_vlan_text:
+            logger.info(f"Corrigiendo VLAN del puerto ETH {index}: {current_option} → {target_vlan_text}")
+            vlan_select.select_by_visible_text(target_vlan_text)
+            eth_port_save(driver)
+
+            # esperar cierre
+            wait_modal_closed(driver, modal)
+        else:
+            logger.info(f"Puerto ETH {index}: VLAN correcta ({target_vlan_text}), no se modifica.")
+            wait_modal_closed(driver, modal)
+
+    return True
+
+"""
