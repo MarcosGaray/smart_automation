@@ -30,7 +30,7 @@ def main():
     create_not_processed_temp(onu_list)
 
     logger.info("Cargando webdriver...")
-    driver = start_driver()
+    driver = start_driver(True)
 
     try:
         logger.info("Iniciando sesión...")

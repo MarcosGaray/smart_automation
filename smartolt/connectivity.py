@@ -111,7 +111,7 @@ def open_ppp_interface_section(driver):
 
 def check_connection_status(driver):
     connection_status_span_locator = (By.XPATH, "//td[normalize-space()='Connection status']/following-sibling::td//span")
-    time.sleep(5)
+    time.sleep(4)
     try:
         connection_status_span = wait_visible(driver, connection_status_span_locator)
         connection_status_text = connection_status_span.text.strip().lower()
@@ -120,7 +120,7 @@ def check_connection_status(driver):
     return connection_status_text
     
 def reset_ppp_connection(driver, timeout=60):
-    time.sleep(5)
+    time.sleep(4)
     # 1) Localizador del combo "Reset connection"
     reset_select_locator = (By.XPATH,
         "//td[normalize-space()='Reset connection']/following-sibling::td//select"
