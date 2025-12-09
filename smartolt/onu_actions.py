@@ -148,9 +148,37 @@ def check_svlan_id(driver, timeout=2):
 
     return True
 
+def get_attached_vlans(driver, timeout=8):
+    attached_vlans_locator = (By.XPATH, "//a[contains(@href,'#updateVlans')]")
+    try:
+        element = wait_visible(driver, attached_vlans_locator, timeout=timeout)
+        element_text = element.get_attribute("innerText").strip().replace(" ", "")
+
+        if not element_text:
+            raise ElementException("No posee attached VLANs")
+
+        # Filtrar posibles strings vacíos
+        vlans = [vlan for vlan in element_text.split(",") if vlan]
+
+        return vlans
+    except ElementException:
+        raise
+    except Exception:
+        raise ElementException("Error detectando si la ONU tiene attached VLANs")
+    
+
 
 def migrate_vlan(driver, onu, timeout=70):
     # Supuesto: ESTAMOS EN LA PAGINA DE CONFIGURACIÓN DE LA ONU
+
+    # 0) Verificar si tiene attached VLANs
+    try:
+        attached_vlans = get_attached_vlans(driver)
+    except ElementException:
+        raise
+    except Exception:
+        raise ElementException("Error detectando si la ONU tiene attached VLANs")
+
     # 1) Abrir modal de configuración
     try:
         open_configure_modal(driver)
@@ -178,15 +206,20 @@ def migrate_vlan(driver, onu, timeout=70):
     except Exception:
         raise ElementException("Error detectando si la ONU usa SVLAN-ID")
     
+    # 6) Si tiene attached VLANs → no se puede migrar
+    if len(attached_vlans) > 1:
+        return False, False, use_svlan, attached_vlans
+
+
     logger.info(f"ONU {onu} - VLAN actual (texto): '{current_selected_vlan_text}'")
 
-    # 6) Verificar si la VLAN actual está en el diccionario
+    # 7) Verificar si la VLAN actual está en el diccionario
     if not is_vlan_in_migration_dictionary(current_selected_vlan_text, VLAN_MIGRATION_DICT):
         raise ElementException(f"VLAN actual '{current_selected_vlan_text}' no está en el diccionario de migración")
 
     target_vlan_text = VLAN_MIGRATION_DICT[current_selected_vlan_text]
 
-    # 7) Revisar el estado de la ONU
+    # 8) Revisar el estado de la ONU
     expected_onu_status = 'Online'
     is_online = True
     try:
@@ -198,12 +231,12 @@ def migrate_vlan(driver, onu, timeout=70):
         is_online = False
 
 
-    # 8) Si vlan_actual == vlan_target → ya está migrada
+    # 9) Si vlan_actual == vlan_target → ya está migrada
     if current_selected_vlan_text == target_vlan_text:
         logger.info(f"ONU {onu} ya estaba en target VLAN '{target_vlan_text}'")
-        return True,is_online, use_svlan
+        return True,is_online, use_svlan, attached_vlans
 
-    # 9) Buscar la opción cuyo texto coincida con target_text y seleccionar
+    # 10) Buscar la opción cuyo texto coincida con target_text y seleccionar
     try:
         vlan_target_option = get_select_target_option(selenium_select, target_vlan_text)
         try:
@@ -222,20 +255,20 @@ def migrate_vlan(driver, onu, timeout=70):
     logger.info(f"ONU {onu} - VLAN target seleccionada '{target_vlan_text}'")
 
 
-    # 10) Click en Save y esperar confirmación (si corresponde)
+    # 11) Click en Save y esperar confirmación (si corresponde)
     save_locator = (By.XPATH, "//a[@id='submitUpdateSpeedProfiles' or contains(@class,'submitUpdateSpeedProfiles') or normalize-space(.)='Save']")
     try:
         safe_click(driver, save_locator, timeout=6)
     except Exception:
         raise ElementException(f"No se pudo hacer click en Save")
     
-    # 11) Esperar a que la modal se cierre
+    # 12) Esperar a que la modal se cierre
     try:
         wait_modal_closed(driver, modal)
     except Exception:
         raise ElementException("No se pudo cerrar la ventana modal de configuración")
     
-    # 12) Determinar si hacer resync o no
+    # 13) Determinar si hacer resync o no
     if is_online:
         # Hacer resync
         try:
@@ -255,7 +288,7 @@ def migrate_vlan(driver, onu, timeout=70):
     logger.info(f"ONU {onu} VLAN migrada correctamente: {current_selected_vlan_text} -> {target_vlan_text}")
     logger.info("---------------------------------------------")
 
-    return True, is_online ,use_svlan
+    return True, is_online ,use_svlan, attached_vlans
 
 #resync_onu_config(driver)
 def resync_onu_config(driver,timeout=120):

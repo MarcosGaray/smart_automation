@@ -6,6 +6,7 @@ date = datetime.now().strftime("%Y-%m-%d__%H-%M-%S")
 OUTPUT_FOLDER = f"sheets/output/{date}"
 OUTPUT_CONNECTION_RESULTS_FOLDER = f"{OUTPUT_FOLDER}/connection-results"
 OUTPUT_SVLAN_FOLDER = f"{OUTPUT_FOLDER}/check_svlan"
+OUTPUT_MORE_THAN_ONE_VLAN_FOLDER = f"{OUTPUT_FOLDER}/check_more_than_one_vlan"
 
 def ensure_output_folder(path=None):
     if path is None:
@@ -76,6 +77,16 @@ def log_check_svlan_success(username):
         "timestamp": datetime.now().isoformat()
     }])
     path = os.path.join(OUTPUT_SVLAN_FOLDER, "check-svlan.csv")
+    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
+def log_check_attached_vlans(username, message):
+    ensure_output_folder(OUTPUT_MORE_THAN_ONE_VLAN_FOLDER)
+    df = pd.DataFrame([{
+        "username": username,
+        "message": message,
+        "timestamp": datetime.now().isoformat()
+    }])
+    path = os.path.join(OUTPUT_MORE_THAN_ONE_VLAN_FOLDER, "check-attached-vlans.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
 
 # ===========================================

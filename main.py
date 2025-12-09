@@ -3,12 +3,12 @@ from driver_setup import start_driver
 from smartolt.login import login_smartolt
 from smartolt.navigate import go_to_configured_tab, search_user, open_matching_result, go_back, go_to_configured_by_URL
 from sheets.sheets_reader import load_onu_list
-from sheets.sheets_writer import log_migration_success, log_fail, log_disconected_success, log_check_svlan_success, backup_success_block,create_not_processed_temp, remove_from_not_processed_temp,rename_not_processed_temp
+from sheets.sheets_writer import log_migration_success, log_fail, log_disconected_success, log_check_svlan_success, backup_success_block,create_not_processed_temp, remove_from_not_processed_temp,rename_not_processed_temp,log_check_attached_vlans
 from utils.logger import get_logger
 from smartolt.onu_actions import migrate_vlan
 from data import USER, PASSWORD, INPUT_ONUS_FILE
 import pdb
-from exceptions import ElementException,Disconnected_ONU_Exception,ConnectionValidationException
+from exceptions import ElementException,Disconnected_ONU_Exception,ConnectionValidationException, AttachedVlansException
 from smartolt.connectivity import start_connection_validation
 
 logger = get_logger(__name__)
@@ -66,15 +66,22 @@ def main():
             matched = open_matching_result(driver, onu)
 
             if matched:
-                migrated, is_online, use_svlan = migrate_vlan(driver, onu)
+                migrated, is_online, use_svlan, attached_vlans_list = migrate_vlan(driver, onu)
+
+                if use_svlan: 
+                    log_check_svlan_success(onu)
+                    logger.warning("La ONU posee SVLAN. Revisar a mano.")
+                else:
+                    logger.info("La ONU no posee SVLAN.")
+                
+                vlans = ",".join(attached_vlans_list)
+
+                if len(attached_vlans_list) > 1:
+                    raise AttachedVlansException(f"{onu} tiene {len(attached_vlans_list)} VLANs asociadas ({vlans}). Revisar a mano. No se procesa")
+                
                 logger.info(f'"{onu}" - Migrated: {migrated} - Is Online: {is_online} - Usa svlan: {use_svlan}')
                 if migrated:
-                    remove_from_not_processed_temp(onu)
-                    if use_svlan: 
-                        log_check_svlan_success(onu)
-                        logger.warning("La ONU posee SVLAN. Revisar a mano.")
-                    else:
-                        logger.info("La ONU no posee SVLAN. Migración Exitosa!")
+                    remove_from_not_processed_temp(onu)     
                         
                     current_onu_url = driver.current_url
                     if is_online:
@@ -97,10 +104,14 @@ def main():
             else:
                 log_fail(onu, "Sin coincidencia exacta en resultados del SMARTOLT")
                 logger.warning(f"FALLO: {onu}")
+        except AttachedVlansException as exception_msg:
+            log_check_attached_vlans(onu,exception_msg)
+            logger.warning(exception_msg)
         except Exception as e:
             short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
             log_fail(onu, f"{short_msg}")
-            logger.error(f"ERROR {onu}: {e}")
+            logger.error(f"ERROR {onu}: {short_msg}")
+            #En el caso de que se registra como failure, se mantiene como no_procesado
         
         try:
             go_to_configured_by_URL(driver)
