@@ -14,6 +14,10 @@ class SVLANException(SmartOLTException):
     """La ONU posee SVLAN. Revisar a mano."""
     pass
 
+class AttachedVlansException(SmartOLTException):
+    """La ONU posee mas de una VLANs. Revisar a mano."""
+    pass
+
 class ConnectionValidationException(SmartOLTException):
     """Error en el proceso de validar conexión."""
     pass

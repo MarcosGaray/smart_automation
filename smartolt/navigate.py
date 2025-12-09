@@ -77,14 +77,18 @@ def go_back(driver, locator=(By.XPATH, "//tr[contains(@class, 'valign-center')]"
     time.sleep(2)
 
 def open_matching_result(driver, expected_onu, timeout=10):
+    
     locator = (By.XPATH, "//tr[contains(@class, 'valign-center')]")
-    wait_visible(driver, locator, 2)
+    try:
+        wait_visible(driver, locator, 2)
+    except Exception as e:
+        raise ElementException(f"No hay resultados de la busqueda: {expected_onu}. Posible ONU eliminada o en Bridge Mode")
     
     rows = driver.find_elements(*locator)
     
     if not rows:
         logger.info("No hay filas para procesar.")
-        return False
+        raise ElementException("No hay filas para procesar.")
 
     for i, row in enumerate(rows, start=1):
         logger.info(f"Analizando fila #{i} ...")
@@ -96,7 +100,7 @@ def open_matching_result(driver, expected_onu, timeout=10):
             )
             view_btn.click()
         except Exception as e:
-            logger.error(f"No se pudo abrir View en fila #{i}: {e}")
+            logger.error(f"No se pudo abrir View en fila #{i}")
             continue
 
         # Extraer username real
@@ -109,7 +113,7 @@ def open_matching_result(driver, expected_onu, timeout=10):
 
         # No coincide → volver atrás
         logger.info("No coincide. Regresando...")
-
+        logger.info("-----------------------------------------------------")
         go_back(driver)
 
     # Se recorrieron todas las filas
