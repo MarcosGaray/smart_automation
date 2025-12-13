@@ -1,9 +1,16 @@
 import os
 import pandas as pd
 from datetime import datetime
+from data import ROUTER_NAME
 
 date = datetime.now().strftime("%Y-%m-%d__%H-%M-%S")
-OUTPUT_FOLDER = f"sheets/output/{date}"
+# Router general path
+GENERAL_OUTPUT_FOLDER = f"sheets/output/{ROUTER_NAME}"
+
+# Router specific migration path by date
+OUTPUT_FOLDER = f"{GENERAL_OUTPUT_FOLDER}/{date}"
+
+# Special cases folders
 OUTPUT_CONNECTION_RESULTS_FOLDER = f"{OUTPUT_FOLDER}/connection-results"
 OUTPUT_SVLAN_FOLDER = f"{OUTPUT_FOLDER}/check_svlan"
 OUTPUT_MORE_THAN_ONE_VLAN_FOLDER = f"{OUTPUT_FOLDER}/check_more_than_one_vlan"
@@ -18,6 +25,15 @@ def ensure_output_folder(path=None):
 # LOGS NORMALES
 # ================================
 
+def log_all_migrations_success(username):
+    ensure_output_folder(GENERAL_OUTPUT_FOLDER)
+    df = pd.DataFrame([{
+        "username": username,
+        "timestamp": datetime.now().isoformat()
+    }])
+    path = os.path.join(GENERAL_OUTPUT_FOLDER, "all-migration-success.csv")
+    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
 def log_migration_success(username,url):
     ensure_output_folder()
     df = pd.DataFrame([{
@@ -27,6 +43,7 @@ def log_migration_success(username,url):
     }])
     path = os.path.join(OUTPUT_FOLDER, "migration-success.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+    log_all_migrations_success(username)
 
 def log_disconected_success(username, reason):
     ensure_output_folder()
@@ -37,6 +54,7 @@ def log_disconected_success(username, reason):
     }])
     path = os.path.join(OUTPUT_FOLDER, "disconected-success.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+    log_all_migrations_success(username)
 
 def log_fail(username, reason):
     ensure_output_folder()
@@ -70,10 +88,11 @@ def log_connection_fail(username, reason, onu_url):
     path = os.path.join(OUTPUT_CONNECTION_RESULTS_FOLDER, "connection-fail.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
 
-def log_check_svlan_success(username):
+def log_check_svlan_success(username,svlan_status):
     ensure_output_folder(OUTPUT_SVLAN_FOLDER)
     df = pd.DataFrame([{
         "username": username,
+        "svlan_status": svlan_status,
         "timestamp": datetime.now().isoformat()
     }])
     path = os.path.join(OUTPUT_SVLAN_FOLDER, "check-svlan.csv")

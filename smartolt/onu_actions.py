@@ -1,5 +1,5 @@
 from selenium.webdriver.common.by import By
-from utils.helpers import wait_until, wait_visible, wait_clickable, wait_presence, wait_clickable, safe_click
+from utils.helpers import wait_until, wait_visible, wait_clickable, wait_presence, wait_clickable, safe_click, assert_real_function_result
 from utils.logger import get_logger
 from data import VLAN_MIGRATION_DICT
 from exceptions import ElementException
@@ -148,6 +148,13 @@ def check_svlan_id(driver, timeout=2):
 
     return True
 
+def alternate_svlan_checkbox(driver, timeout=5):
+    svlan_checkbox_locator = (By.XPATH, "//input[@id='use_svlan' and @type='checkbox']")
+    try:
+        safe_click(driver, svlan_checkbox_locator,timeout)
+    except Exception:
+        raise ElementException("No se pudo alternar el checkbox de SVLAN. Debe quedar unchecked.")
+
 def get_attached_vlans(driver, timeout=8):
     attached_vlans_locator = (By.XPATH, "//a[contains(@href,'#updateVlans')]")
     try:
@@ -165,8 +172,6 @@ def get_attached_vlans(driver, timeout=8):
         raise
     except Exception:
         raise ElementException("Error detectando si la ONU tiene attached VLANs")
-    
-
 
 def migrate_vlan(driver, onu, timeout=70):
     # Supuesto: ESTAMOS EN LA PAGINA DE CONFIGURACIÓN DE LA ONU
@@ -201,14 +206,15 @@ def migrate_vlan(driver, onu, timeout=70):
     # 5) Checkear si tiene SVLAN-ID
     try:
         use_svlan = check_svlan_id(driver) # True si tiene SVLAN-ID
+        deactivated_vlan = False
     except ElementException:
         raise
     except Exception:
-        raise ElementException("Error detectando si la ONU usa SVLAN-ID")
+        raise ElementException("Error inesperado detectando si la ONU usa SVLAN-ID")
     
     # 6) Si tiene attached VLANs → no se puede migrar
     if len(attached_vlans) > 1:
-        return False, False, use_svlan, attached_vlans
+        return False, False, use_svlan, attached_vlans, deactivated_vlan
 
 
     logger.info(f"ONU {onu} - VLAN actual (texto): '{current_selected_vlan_text}'")
@@ -218,25 +224,43 @@ def migrate_vlan(driver, onu, timeout=70):
         raise ElementException(f"VLAN actual '{current_selected_vlan_text}' no está en el diccionario de migración")
 
     target_vlan_text = VLAN_MIGRATION_DICT[current_selected_vlan_text]
+        
 
     # 8) Revisar el estado de la ONU
     expected_onu_status = 'Online'
     is_online = True
     try:
-        onu_status = get_onu_status(driver, timeout=timeout)    
+        onu_status = assert_real_function_result(get_onu_status,driver, expected_onu_status)   
     except Exception as ex:
         raise ElementException(f"Error al obtener el estado de la ONU")
 
     if not onu_status.__contains__(expected_onu_status):
         is_online = False
 
+    #9) si tiene SVLAN, desactivar
+    try:
+        if use_svlan:
+            alternate_svlan_checkbox(driver)
+            deactivated_vlan = True
+            logger.info(f"{onu} - SVLAN desactivada")
+    except ElementException:
+        raise
+    except Exception:
+        raise ElementException("Error inesperado al alternar el checkbox de SVLAN")
 
-    # 9) Si vlan_actual == vlan_target → ya está migrada
+    # 10) Si vlan_actual == vlan_target → ya está migrada
     if current_selected_vlan_text == target_vlan_text:
         logger.info(f"ONU {onu} ya estaba en target VLAN '{target_vlan_text}'")
-        return True,is_online, use_svlan, attached_vlans
+        try:
+            save_and_close_configuration_modal(driver,modal)
+        except ElementException as ex:
+            raise
+        except Exception as ex:
+            raise ElementException(f"Error inesperado al cerrar la ventana modal de configuración")
 
-    # 10) Buscar la opción cuyo texto coincida con target_text y seleccionar
+        return True,is_online, use_svlan, attached_vlans, deactivated_vlan
+
+    # 11) Buscar la opción cuyo texto coincida con target_text y seleccionar
     try:
         vlan_target_option = get_select_target_option(selenium_select, target_vlan_text)
         try:
@@ -254,19 +278,14 @@ def migrate_vlan(driver, onu, timeout=70):
 
     logger.info(f"ONU {onu} - VLAN target seleccionada '{target_vlan_text}'")
 
+    # 12) Click en Save y esperar confirmación (si corresponde)
+    try:
+        save_and_close_configuration_modal(driver,modal)
+    except ElementException as ex:
+        raise
+    except Exception as ex:
+        raise ElementException(f"Error inesperado al cerrar la ventana modal de configuración")
 
-    # 11) Click en Save y esperar confirmación (si corresponde)
-    save_locator = (By.XPATH, "//a[@id='submitUpdateSpeedProfiles' or contains(@class,'submitUpdateSpeedProfiles') or normalize-space(.)='Save']")
-    try:
-        safe_click(driver, save_locator, timeout=6)
-    except Exception:
-        raise ElementException(f"No se pudo hacer click en Save")
-    
-    # 12) Esperar a que la modal se cierre
-    try:
-        wait_modal_closed(driver, modal)
-    except Exception:
-        raise ElementException("No se pudo cerrar la ventana modal de configuración")
     
     # 13) Determinar si hacer resync o no
     if is_online:
@@ -288,8 +307,24 @@ def migrate_vlan(driver, onu, timeout=70):
     logger.info(f"ONU {onu} VLAN migrada correctamente: {current_selected_vlan_text} -> {target_vlan_text}")
     logger.info("---------------------------------------------")
 
-    return True, is_online ,use_svlan, attached_vlans
+    return True, is_online ,use_svlan, attached_vlans, deactivated_vlan
 
+
+def save_and_close_configuration_modal(driver,modal):
+    # Click en Save y esperar confirmación (si corresponde)
+    save_locator = (By.XPATH, "//a[@id='submitUpdateSpeedProfiles' or contains(@class,'submitUpdateSpeedProfiles') or normalize-space(.)='Save']")
+    try:
+        safe_click(driver, save_locator, timeout=6)
+    except Exception:
+        raise ElementException(f"No se pudo hacer click en Save")
+    
+    # Esperar a que la modal se cierre
+    try:
+        wait_modal_closed(driver, modal)
+        logger.info("Ventana modal de configuración: saved and closed")
+    except Exception:
+        raise ElementException("No se pudo cerrar la ventana modal de configuración")
+    
 #resync_onu_config(driver)
 def resync_onu_config(driver,timeout=120):
     resync_locator = (By.XPATH, "//a[@id='rebuildModal' or normalize-space(.)='Resync config']")
@@ -319,7 +354,6 @@ def resync_onu_config(driver,timeout=120):
     except Exception:
         raise ElementException(f"No se pudo hacer click en Resync config")
     
-
 def get_resync_modal(driver, timeout=10):
     modal_locators = [
         (By.XPATH, "//div[@id='rebuildModal' and contains(@class,'in')]"),

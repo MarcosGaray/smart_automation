@@ -66,11 +66,12 @@ def main():
             matched = open_matching_result(driver, onu)
 
             if matched:
-                migrated, is_online, use_svlan, attached_vlans_list = migrate_vlan(driver, onu)
+                migrated, is_online, use_svlan, attached_vlans_list, deactivated_vlan = migrate_vlan(driver, onu)
 
                 if use_svlan: 
-                    log_check_svlan_success(onu)
-                    logger.warning("La ONU posee SVLAN. Revisar a mano.")
+                    svlan_status = "desactivada" if deactivated_vlan else "activada"
+                    log_check_svlan_success(onu,svlan_status)
+                    logger.warning("La ONU posee SVLAN. Status: " + svlan_status)
                 else:
                     logger.info("La ONU no posee SVLAN.")
                 
@@ -79,7 +80,7 @@ def main():
                 if len(attached_vlans_list) > 1:
                     raise AttachedVlansException(f"{onu} tiene {len(attached_vlans_list)} VLANs asociadas ({vlans}). Revisar a mano. No se procesa")
                 
-                logger.info(f'"{onu}" - Migrated: {migrated} - Is Online: {is_online} - Usa svlan: {use_svlan}')
+                logger.info(f'"{onu}" - Migrated: {migrated} - Is Online: {is_online} - Usa SVLAN: {use_svlan} - SVLAN desactivada: {deactivated_vlan}')
                 if migrated:
                     remove_from_not_processed_temp(onu)     
                         
