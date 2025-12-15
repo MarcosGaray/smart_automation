@@ -82,7 +82,6 @@ def main():
                 
                 logger.info(f'"{onu}" - Migrated: {migrated} - Is Online: {is_online} - Usa SVLAN: {use_svlan} - SVLAN desactivada: {deactivated_vlan}')
                 if migrated:
-                    remove_from_not_processed_temp(onu)     
                         
                     current_onu_url = driver.current_url
                     if is_online:
@@ -113,6 +112,8 @@ def main():
             log_fail(onu, f"{short_msg}")
             logger.error(f"ERROR {onu}: {short_msg}")
             #En el caso de que se registra como failure, se mantiene como no_procesado
+        finally:
+            remove_from_not_processed_temp(onu)
         
         try:
             go_to_configured_by_URL(driver)

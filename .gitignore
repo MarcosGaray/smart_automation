@@ -31,10 +31,10 @@ logs
 # Sheets outputs
 
 # Ignorar contenido de sheets/input y sheets/output
-sheets/input/*
-sheets/output/*
+exports/input/*
+exports/output/*
 
 # Pero mantener un placeholder vacío si existen
-!sheets/input/.keep
-!sheets/output/.keep
+!exports/input/.keep
+!exports/output/.keep
 

@@ -19,8 +19,8 @@ CONFIGURED_URL = "https://smartolt.com/onu/configured"
     username2
     username3
 """
-INPUT_ONUS_FILE = "sheets/input/onus.txt"
-
+INPUT_ONUS_FILE = "exports/input/onus.txt"
+ROUTER_NAME = "RName"
 
 #Vlan migration dictionaries: {'actual_vlan': 'target_vlan'}
 

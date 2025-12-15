@@ -5,7 +5,7 @@ from data import ROUTER_NAME
 
 date = datetime.now().strftime("%Y-%m-%d__%H-%M-%S")
 # Router general path
-GENERAL_OUTPUT_FOLDER = f"sheets/output/{ROUTER_NAME}"
+GENERAL_OUTPUT_FOLDER = f"exports/output/{ROUTER_NAME}"
 
 # Router specific migration path by date
 OUTPUT_FOLDER = f"{GENERAL_OUTPUT_FOLDER}/{date}"
@@ -25,47 +25,90 @@ def ensure_output_folder(path=None):
 # LOGS NORMALES
 # ================================
 
-def log_all_migrations_success(username):
-    ensure_output_folder(GENERAL_OUTPUT_FOLDER)
+def log_migration_success(username,url):
+    ensure_output_folder()
+    timestamp = datetime.now().isoformat()
     df = pd.DataFrame([{
         "username": username,
-        "timestamp": datetime.now().isoformat()
+        "url": url,
+        "timestamp": timestamp
+    }])
+    path = os.path.join(OUTPUT_FOLDER, "migration-success.csv")
+    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+    log_all_migration_success(username, timestamp)
+    log_all_success(username,"connected", timestamp)
+    
+def log_disconected_success(username, reason):
+    ensure_output_folder()
+    timestamp = datetime.now().isoformat()
+    df = pd.DataFrame([{
+        "username": username,
+        "reason": reason,
+        "timestamp": timestamp
+    }])
+    path = os.path.join(OUTPUT_FOLDER, "disconnected-success.csv")
+    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+    log_all_disconnected_success(username, reason, timestamp)
+    log_all_success(username,"disconnected", timestamp)
+
+def log_all_disconnected_success(username, reason, timestamp=None):
+    ensure_output_folder(GENERAL_OUTPUT_FOLDER)
+    if timestamp is None:
+        timestamp = datetime.now().isoformat()
+    df = pd.DataFrame([{
+        "username": username,
+        "reason": reason,
+        "timestamp": timestamp
+    }])
+    path = os.path.join(GENERAL_OUTPUT_FOLDER, "all-disconnected-success.csv")
+    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
+def log_all_migration_success(username, timestamp=None):
+    ensure_output_folder(GENERAL_OUTPUT_FOLDER)
+    if timestamp is None:
+        timestamp = datetime.now().isoformat()
+    df = pd.DataFrame([{
+        "username": username,
+        "timestamp": timestamp
     }])
     path = os.path.join(GENERAL_OUTPUT_FOLDER, "all-migration-success.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
 
-def log_migration_success(username,url):
-    ensure_output_folder()
+def log_all_success(username, status, timestamp=None):
+    ensure_output_folder(GENERAL_OUTPUT_FOLDER)
+    if timestamp is None:
+        timestamp = datetime.now().isoformat()
     df = pd.DataFrame([{
         "username": username,
-        "url": url,
-        "timestamp": datetime.now().isoformat()
+        "status": status,
+        "timestamp": timestamp
     }])
-    path = os.path.join(OUTPUT_FOLDER, "migration-success.csv")
+    path = os.path.join(GENERAL_OUTPUT_FOLDER, "all-success.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
-    log_all_migrations_success(username)
-
-def log_disconected_success(username, reason):
-    ensure_output_folder()
-    df = pd.DataFrame([{
-        "username": username,
-        "reason": reason,
-        "timestamp": datetime.now().isoformat()
-    }])
-    path = os.path.join(OUTPUT_FOLDER, "disconected-success.csv")
-    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
-    log_all_migrations_success(username)
 
 def log_fail(username, reason):
     ensure_output_folder()
+    timestamp = datetime.now().isoformat()
     df = pd.DataFrame([{
         "username": username,
         "reason": reason,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": timestamp
     }])
     path = os.path.join(OUTPUT_FOLDER, "failure.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+    log_all_fails(username, reason, timestamp)
 
+def log_all_fails(username, reason, timestamp=None):
+    ensure_output_folder(GENERAL_OUTPUT_FOLDER)
+    if timestamp is None:
+        timestamp = datetime.now().isoformat()
+    df = pd.DataFrame([{
+        "username": username,
+        "reason": reason,
+        "timestamp": timestamp
+    }])
+    path = os.path.join(GENERAL_OUTPUT_FOLDER, "all-fails.csv")
+    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
 
 def log_connection_success(username,onu_url):
     ensure_output_folder(OUTPUT_CONNECTION_RESULTS_FOLDER)
@@ -90,23 +133,55 @@ def log_connection_fail(username, reason, onu_url):
 
 def log_check_svlan_success(username,svlan_status):
     ensure_output_folder(OUTPUT_SVLAN_FOLDER)
+    timestamp = datetime.now().isoformat()
     df = pd.DataFrame([{
         "username": username,
         "svlan_status": svlan_status,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": timestamp
     }])
     path = os.path.join(OUTPUT_SVLAN_FOLDER, "check-svlan.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
 
+    log_all_check_svlans(username, svlan_status, timestamp)
+
+def log_all_check_svlans(username, svlan_status, timestamp=None):
+    ensure_output_folder(GENERAL_OUTPUT_FOLDER)
+    if timestamp is None:
+        timestamp = datetime.now().isoformat()
+    df = pd.DataFrame([{
+        "username": username,
+        "svlan_status": svlan_status,
+        "timestamp": timestamp
+    }])
+    path = os.path.join(GENERAL_OUTPUT_FOLDER, "all-check-svlans.csv")
+    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
 def log_check_attached_vlans(username, message):
     ensure_output_folder(OUTPUT_MORE_THAN_ONE_VLAN_FOLDER)
+    timestamp = datetime.now().isoformat()
     df = pd.DataFrame([{
         "username": username,
         "message": message,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": timestamp
     }])
     path = os.path.join(OUTPUT_MORE_THAN_ONE_VLAN_FOLDER, "check-attached-vlans.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
+    log_all_attached_vlans(username, message, timestamp)
+
+def log_all_attached_vlans(username, message, timestamp=None):
+    ensure_output_folder(GENERAL_OUTPUT_FOLDER)
+    if timestamp is None:
+        timestamp = datetime.now().isoformat()
+    df = pd.DataFrame([{
+        "username": username,
+        "message": message,
+        "timestamp": timestamp
+    }])
+    path = os.path.join(GENERAL_OUTPUT_FOLDER, "all-attached-vlans.csv")
+    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+
+
 
 # ===========================================
 # MANEJO SEGURO DE NOT-PROCESSED 

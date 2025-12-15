@@ -48,6 +48,12 @@ def open_configure_modal(driver, timeout=8):
         raise ElementException("No se pudo abrir la ventana Configure. Error al clicar en el botón Configure")
     return True
 
+def open_onu_mode_modal(driver, timeout=8):
+    onu_mode_locator = (By.XPATH, "//a[@href='#updateMode']")
+    if not safe_click(driver, onu_mode_locator):
+        raise ElementException("No se pudo abrir la ventana ONU mode. Error al clicar en el botón ONU mode")
+    return True
+
 def get_configuration_modal(driver, timeout=8):
     modal_locators = [
         (By.XPATH, "//div[contains(@class,'modal') and @id='updateSpeedProfiles']"),
@@ -64,6 +70,24 @@ def get_configuration_modal(driver, timeout=8):
 
     if modal is None:
         raise ElementException("No apareció la ventana modal de configuración (posible animación/carga).")
+    return modal
+
+def get_onu_mode_modal(driver, timeout=8):
+    modal_locators = [
+        (By.XPATH, "//div[contains(@class,'modal') and @id='updateMode']"),
+        (By.XPATH, "//div[contains(@class,'modal') and not(contains(@style,'display: none'))]"),
+    ]
+
+    modal = None
+    for loc in modal_locators:
+        try:
+            modal = wait_visible(driver, loc, timeout=6)
+            break
+        except Exception:
+            continue
+
+    if modal is None:
+        raise ElementException("No apareció la ventana modal de onu mode (posible animación/carga).")
     return modal
 
 def get_select_vlan_element(driver, timeout=8):
@@ -187,7 +211,7 @@ def migrate_vlan(driver, onu, timeout=70):
     # 1) Abrir modal de configuración
     try:
         open_configure_modal(driver)
-        modal = get_configuration_modal(driver)
+        config_modal = get_configuration_modal(driver)
     except ElementException as ex:
         raise
 
@@ -252,7 +276,7 @@ def migrate_vlan(driver, onu, timeout=70):
     if current_selected_vlan_text == target_vlan_text:
         logger.info(f"ONU {onu} ya estaba en target VLAN '{target_vlan_text}'")
         try:
-            save_and_close_configuration_modal(driver,modal)
+            save_and_close_configuration_modal(driver,config_modal)
         except ElementException as ex:
             raise
         except Exception as ex:
@@ -280,14 +304,24 @@ def migrate_vlan(driver, onu, timeout=70):
 
     # 12) Click en Save y esperar confirmación (si corresponde)
     try:
-        save_and_close_configuration_modal(driver,modal)
+        save_and_close_configuration_modal(driver,config_modal)
     except ElementException as ex:
         raise
     except Exception as ex:
         raise ElementException(f"Error inesperado al cerrar la ventana modal de configuración")
 
-    
-    # 13) Determinar si hacer resync o no
+    # 13) Abrir modal de ONU mode y Click en Update
+    try:
+        open_onu_mode_modal(driver)
+        onu_mode_modal = get_onu_mode_modal(driver)
+        update_and_close_onu_mode_modal(driver,onu_mode_modal)
+    except ElementException as ex:
+        raise
+    except Exception as ex:
+        raise ElementException(f"Error inesperado al cerrar la ventana modal de ONU mode")
+
+
+    """ # 13) Determinar si hacer resync o no
     if is_online:
         # Hacer resync
         try:
@@ -301,7 +335,7 @@ def migrate_vlan(driver, onu, timeout=70):
             reboot_onu(driver, timeout=8)
             logger.info(f"ONU {onu} Reboot Exitoso")
         except Exception as ex:
-            raise
+            raise """
 
     logger.info("---------------------------------------------")
     logger.info(f"ONU {onu} VLAN migrada correctamente: {current_selected_vlan_text} -> {target_vlan_text}")
@@ -309,22 +343,40 @@ def migrate_vlan(driver, onu, timeout=70):
 
     return True, is_online ,use_svlan, attached_vlans, deactivated_vlan
 
-
-def save_and_close_configuration_modal(driver,modal):
-    # Click en Save y esperar confirmación (si corresponde)
-    save_locator = (By.XPATH, "//a[@id='submitUpdateSpeedProfiles' or contains(@class,'submitUpdateSpeedProfiles') or normalize-space(.)='Save']")
+def save_and_close_modal(driver,modal,save_locator=None):
+    if save_locator is None:
+        raise ElementException("Debe indicar un localizador para el botón 'save' o 'update'")
     try:
         safe_click(driver, save_locator, timeout=6)
     except Exception:
-        raise ElementException(f"No se pudo hacer click en Save")
+        raise ElementException(f"No se pudo hacer click en 'save' o 'update'")
     
     # Esperar a que la modal se cierre
     try:
         wait_modal_closed(driver, modal)
-        logger.info("Ventana modal de configuración: saved and closed")
     except Exception:
-        raise ElementException("No se pudo cerrar la ventana modal de configuración")
+        raise ElementException("No se pudo cerrar la ventana modal")
     
+
+def save_and_close_configuration_modal(driver,modal):
+    save_locator = (By.XPATH, "//a[@id='submitUpdateSpeedProfiles' or contains(@class,'submitUpdateSpeedProfiles') or normalize-space(.)='Save']")
+    try:
+        save_and_close_modal(driver,modal,save_locator)
+        logger.info("Ventana modal de configuración: saved and closed")
+    except ElementException as ex:
+        message = ex.args[0]
+        raise ElementException(f"Error en ventana modal de configuración: {message}")
+        
+def update_and_close_onu_mode_modal(driver,modal):
+    update_locator = (By.ID, "submitUpdateMode")
+    try:
+        time.sleep(3)
+        save_and_close_modal(driver,modal,update_locator)
+        logger.info("Ventana modal de onu mode: updated and closed")
+    except ElementException as ex:
+        message = ex.args[0]
+        raise ElementException(f"Error en ventana modal de onu mode: {message}")
+
 #resync_onu_config(driver)
 def resync_onu_config(driver,timeout=120):
     resync_locator = (By.XPATH, "//a[@id='rebuildModal' or normalize-space(.)='Resync config']")
