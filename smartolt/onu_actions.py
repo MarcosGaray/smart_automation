@@ -370,7 +370,6 @@ def save_and_close_configuration_modal(driver,modal):
 def update_and_close_onu_mode_modal(driver,modal):
     update_locator = (By.ID, "submitUpdateMode")
     try:
-        time.sleep(3)
         save_and_close_modal(driver,modal,update_locator)
         logger.info("Ventana modal de onu mode: updated and closed")
     except ElementException as ex:
