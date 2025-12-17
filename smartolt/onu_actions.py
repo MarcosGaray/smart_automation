@@ -1,8 +1,9 @@
 from selenium.webdriver.common.by import By
 from utils.helpers import wait_until, wait_visible, wait_clickable, wait_presence, wait_clickable, safe_click, assert_real_function_result
 from utils.logger import get_logger
-from data import VLAN_MIGRATION_DICT
+from data import VLAN_MIGRATION_DICT, RECHECK
 from exceptions import ElementException
+from utils import words_and_messages as msg
 import time
 
 logger = get_logger(__name__)
@@ -254,7 +255,7 @@ def migrate_vlan(driver, onu, timeout=70):
     expected_onu_status = 'Online'
     is_online = True
     try:
-        onu_status = assert_real_function_result(get_onu_status,driver, expected_onu_status)   
+        onu_status = assert_real_function_result(get_onu_status,driver, expected_onu_status, msg.ONU_STATUS_ATTEMP_MSG)   
     except Exception as ex:
         raise ElementException(f"Error al obtener el estado de la ONU")
 
@@ -272,32 +273,34 @@ def migrate_vlan(driver, onu, timeout=70):
     except Exception:
         raise ElementException("Error inesperado al alternar el checkbox de SVLAN")
 
-    # 10) Si vlan_actual == vlan_target → ya está migrada
+    # 10) Si vlan_actual == vlan_target → ya está migrada. Recheck indica que se quiere verificar que la ONU se haya migrado correctamente
     if current_selected_vlan_text == target_vlan_text:
-        logger.info(f"ONU {onu} ya estaba en target VLAN '{target_vlan_text}'")
+        if not RECHECK:
+            logger.info(f"ONU {onu} ya estaba en target VLAN '{target_vlan_text}'")
+            try:
+                save_and_close_configuration_modal(driver,config_modal)
+            except ElementException as ex:
+                raise
+            except Exception as ex:
+                raise ElementException(f"Error inesperado al cerrar la ventana modal de configuración")
+
+            return True,is_online, use_svlan, attached_vlans, deactivated_vlan
+
+    # 11) Buscar la opción cuyo texto coincida con target_text y seleccionar
+    if not RECHECK:
         try:
-            save_and_close_configuration_modal(driver,config_modal)
+            vlan_target_option = get_select_target_option(selenium_select, target_vlan_text)
+            try:
+                # seleccionar por visible text si coincide exactamente:
+                selenium_select.select_by_visible_text(target_vlan_text)
+            except Exception:
+                # fallback: seleccionar por value del option encontrado
+                value = vlan_target_option.get_attribute("value")
+                selenium_select.select_by_value(value)
         except ElementException as ex:
             raise
         except Exception as ex:
-            raise ElementException(f"Error inesperado al cerrar la ventana modal de configuración")
-
-        return True,is_online, use_svlan, attached_vlans, deactivated_vlan
-
-    # 11) Buscar la opción cuyo texto coincida con target_text y seleccionar
-    try:
-        vlan_target_option = get_select_target_option(selenium_select, target_vlan_text)
-        try:
-            # seleccionar por visible text si coincide exactamente:
-            selenium_select.select_by_visible_text(target_vlan_text)
-        except Exception:
-            # fallback: seleccionar por value del option encontrado
-            value = vlan_target_option.get_attribute("value")
-            selenium_select.select_by_value(value)
-    except ElementException as ex:
-        raise
-    except Exception as ex:
-        raise ElementException(f"No se pudo seleccionar la VLAN target '{target_vlan_text}': {ex}")
+            raise ElementException(f"No se pudo seleccionar la VLAN target '{target_vlan_text}': {ex}")
 
 
     logger.info(f"ONU {onu} - VLAN target seleccionada '{target_vlan_text}'")

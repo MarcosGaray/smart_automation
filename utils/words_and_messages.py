@@ -1,0 +1,5 @@
+ATTEMPT = "Attempt"
+DEFAULT_ATTEMP_MSG = "Real result"
+ONU_STATUS_ATTEMP_MSG = "Real ONU status"
+PPP_STATUS_ATTEMP_MSG = "Real PPP interface connectivity status"
+PPP_GATEWAY_ATTEMP_MSG = "Getting real PPP Gateway"

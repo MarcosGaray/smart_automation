@@ -1,4 +1,4 @@
-from utils.helpers import wait_visible
+from utils.helpers import assert_real_function_result, wait_visible
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from utils.logger import get_logger
@@ -8,6 +8,10 @@ from exceptions import ElementException,  ConnectionValidationException
 from smartolt.onu_actions import get_onu_status, resync_onu_config
 from utils.helpers import safe_click
 import time
+from data import PPP_GATEWAY
+from utils import words_and_messages as msg
+from smartolt.onu_functions import get_ppp_gateway
+
 
 logger = get_logger(__name__)
 
@@ -30,8 +34,7 @@ def start_connection_validation(driver, onu_list = None, step = 1):
         # 1) Revisar el estado de la ONU
         expected_status = 'Online'
         try:
-            time.sleep(5)
-            onu_status = get_onu_status(driver)    
+            onu_status = assert_real_function_result(get_onu_status,driver, expected_status, msg.ONU_STATUS_ATTEMP_MSG)  
             logger.info("Estado de la ONU: " + onu_status)
         except Exception:
             log_connection_fail(onu_username, f"Error al obtener el estado de la ONU", onu_url)
@@ -49,7 +52,11 @@ def start_connection_validation(driver, onu_list = None, step = 1):
 
         # open_tr069_and_check_ppp
         try:
-            connection_status_text = open_tr069_and_check_ppp(driver)
+            connection_status_text, resync= open_tr069_and_check_connectivity(driver)
+            if resync:
+                logger.warning(f"ONU {onu_username} - PPP Gateway no es el esperado. Se agrega a la lista de ONUs para reintentar")
+                check_again_onu_list.append(onu_data)
+                continue
         except Exception as e:
             short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
             if step <= 3:
@@ -111,9 +118,8 @@ def open_ppp_interface_section(driver):
 
 def check_connection_status(driver):
     connection_status_span_locator = (By.XPATH, "//td[normalize-space()='Connection status']/following-sibling::td//span")
-    time.sleep(4)
     try:
-        connection_status_span = wait_visible(driver, connection_status_span_locator)
+        connection_status_span = wait_visible(driver, connection_status_span_locator,6)
         connection_status_text = connection_status_span.text.strip().lower()
     except Exception:
         raise ElementException("No se pudo obtener el estado de la conexión PPP")
@@ -152,19 +158,42 @@ def reset_ppp_connection(driver, timeout=60):
         time.sleep(3)  # Para que se actualice la modal
     return True
 
-def open_tr069_and_check_ppp(driver, timeout=60):          
+def open_tr069_and_check_connectivity(driver, timeout=60):          
     # Abre la sección tr069Stat -> PPP Interface y devuelve 'connected', 'connecting', 'disconnected' o None.
     try:
+        espected_connection_status = 'connected'
         open_tr069_section(driver)
-        open_ppp_interface_section(driver)
-        connection_status_text = check_connection_status(driver)
+        open_ppp_interface_section(driver)   
+
+        connection_status_text = assert_real_function_result(check_connection_status, driver, espected_connection_status, msg.PPP_STATUS_ATTEMP_MSG)
         logger.info(f"Estado de la conexión PPP Interface: {connection_status_text}")
     except ElementException:
         raise
     except Exception:
         raise ElementException("Error inesperado al abrir la sección tr069 y PPP Interface Status")
 
-    if connection_status_text != 'connected':
+    try:
+        ppp_gateway_value = get_ppp_gateway(driver,False)
+        if ppp_gateway_value:
+            logger.info(f"PPP Gateway REAL obtenido: {ppp_gateway_value}")
+            if ppp_gateway_value.strip().lower() != PPP_GATEWAY.strip().lower():
+                try:
+                    logger.warning(f"Gateway ({ppp_gateway_value}) no es el esperado ({PPP_GATEWAY}). Intentando resync")
+                    resync_onu_config(driver)
+                    logger.info(f"Resync exitoso")
+                    return connection_status_text, True
+                except Exception as ex:
+                    raise
+            else:
+                logger.info(f"Gateway ({ppp_gateway_value}) es el esperado ({PPP_GATEWAY})")
+        else:
+            logger.info("Resultado None en PPP Gateway. Sigue el flujo normal")
+    except ElementException:
+        raise
+    except Exception:
+        raise ElementException("Error inesperado al obtener PPP Gateway")
+
+    if connection_status_text != espected_connection_status:
         try:
             logger.info("Intentando Reset ppp connection. Flujo normal")
             reset_ppp_connection(driver)
@@ -173,4 +202,5 @@ def open_tr069_and_check_ppp(driver, timeout=60):
         except Exception:
             raise ElementException("Error inesperado al intentar Reset ppp connection")
     
-    return connection_status_text
+    return connection_status_text, False
+
