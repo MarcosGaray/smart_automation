@@ -76,34 +76,43 @@ def go_back(driver, locator=(By.XPATH, "//tr[contains(@class, 'valign-center')]"
     wait_visible(driver, locator, timeout=10)
     time.sleep(2)
 
-def open_matching_result(driver, expected_onu, timeout=10):
-    
-    locator = (By.XPATH, "//tr[contains(@class, 'valign-center')]")
-    try:
-        wait_visible(driver, locator, 2)
-    except Exception as e:
-        raise ElementException(f"No hay resultados de la busqueda: {expected_onu}. Posible ONU eliminada o en Bridge Mode")
-    
-    rows = driver.find_elements(*locator)
-    
-    if not rows:
-        logger.info("No hay filas para procesar.")
-        raise ElementException("No hay filas para procesar.")
+def open_matching_result(driver, expected_onu, timeout=2):
+    row_locator = (By.XPATH, "//tr[contains(@class, 'valign-center')]")
 
-    for i, row in enumerate(rows, start=1):
-        logger.info(f"Analizando fila #{i} ...")
+    try:
+        wait_visible(driver, row_locator, timeout)
+    except Exception:
+        raise ElementException(f"No hay resultados de la busqueda: {expected_onu}. Posible ONU eliminada o en Bridge Mode")
+
+    index = 0
+
+    while True:
+        rows = driver.find_elements(*row_locator)
+
+        if index >= len(rows):
+            break
+
+        logger.info(f"Analizando fila #{index + 1} ...")
 
         try:
+            row = rows[index]
+
             view_btn = row.find_element(
                 By.XPATH,
-                ".//a[contains(.,'View') or contains(.,'view')] | .//button[contains(.,'View') or contains(.,'view')]"
+                ".//a[contains(.,'View') or contains(.,'view')] | "
+                ".//button[contains(.,'View') or contains(.,'view')]"
             )
+
             view_btn.click()
-        except Exception as e:
-            logger.error(f"No se pudo abrir View en fila #{i}")
+
+        except StaleElementReferenceException:
+            logger.warning("Fila stale, reintentando...")
+            continue
+        except Exception:
+            logger.error(f"No se pudo abrir View en fila #{index + 1}")
+            index += 1
             continue
 
-        # Extraer username real
         real_user = reveal_pppoe_username(driver)
         logger.info(f"Username encontrado en detalle: {real_user}")
 
@@ -111,11 +120,11 @@ def open_matching_result(driver, expected_onu, timeout=10):
             logger.info("Coincidencia exacta encontrada ✔")
             return True
 
-        # No coincide → volver atrás
         logger.info("No coincide. Regresando...")
         logger.info("-----------------------------------------------------")
         go_back(driver)
 
-    # Se recorrieron todas las filas
+        index += 1
+
     logger.info("Se recorrieron todas las filas. No se encontró coincidencia exacta.")
     return False

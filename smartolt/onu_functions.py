@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 def get_ppp_gateway(driver):
         try:
-            ppp_gateway_value = assert_real_function_result(get_ppp_gateway_value, driver=driver, expected_result="0.0.0.0", attempt_msg=msg.PPP_GATEWAY_ATTEMP_MSG)
+            ppp_gateway_value = assert_real_function_result(get_ppp_gateway_value, driver=driver, expected_result="990.990.990.990", attempt_msg=msg.PPP_GATEWAY_ATTEMP_MSG)
             #print("log, llego a get_ppp_gateway_value")
             return ppp_gateway_value
         except ElementException as e:
