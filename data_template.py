@@ -22,6 +22,14 @@ CONFIGURED_URL = "https://smartolt.com/onu/configured"
 INPUT_ONUS_FILE = "exports/input/onus.txt"
 ROUTER_NAME = "RName"
 
+#RECHECK: Es para determinar si procesar onus que ya fueron migradas anteriormente. Afecta al paso 10 y 11 de onu_actions.py
+# Comportamiento normal: False -> no procesa la onu si ya se encuentra en la target_vlan
+# Comportamiento alternativo: True -> procesa la onu incluso aunque ya se encuentre en la target_vlan
+RECHECK = False
+
+# PPP_VALID_GATEWAY_LIST: Lista de nombres de las interfaces PPP validas
+PPP_VALID_GATEWAY_LIST = ["Ip_address1", "Ip_address2", "Ip_address3"]
+
 #Vlan migration dictionaries: {'actual_vlan': 'target_vlan'}
 
 #Aqui va un diccionario del nombre exacto de la VLAN como aparece en el select del smartOLT. Para más precisión extraer el texto del elemento HTML inspeccionando elemento.
