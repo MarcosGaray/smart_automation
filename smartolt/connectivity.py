@@ -8,9 +8,9 @@ from exceptions import ElementException,  ConnectionValidationException
 from smartolt.onu_actions import get_onu_status, resync_onu_config
 from utils.helpers import safe_click
 import time
-from data import PPP_GATEWAY
+from data import PPP_VALID_GATEWAY_LIST
 from utils import words_and_messages as msg
-from smartolt.onu_functions import get_ppp_gateway
+from smartolt.onu_functions import get_ppp_gateway,is_valid_ppp_gateway
 
 
 logger = get_logger(__name__)
@@ -173,19 +173,19 @@ def open_tr069_and_check_connectivity(driver, timeout=60):
         raise ElementException("Error inesperado al abrir la sección tr069 y PPP Interface Status")
 
     try:
-        ppp_gateway_value = get_ppp_gateway(driver,False)
+        ppp_gateway_value = get_ppp_gateway(driver)
         if ppp_gateway_value:
             logger.info(f"PPP Gateway REAL obtenido: {ppp_gateway_value}")
-            if ppp_gateway_value.strip().lower() != PPP_GATEWAY.strip().lower():
+            if not is_valid_ppp_gateway(ppp_gateway_value):
                 try:
-                    logger.warning(f"Gateway ({ppp_gateway_value}) no es el esperado ({PPP_GATEWAY}). Intentando resync")
+                    logger.warning(f"Gateway ({ppp_gateway_value}) no está en la lista de esperados ({PPP_VALID_GATEWAY_LIST}). Intentando resync")
                     resync_onu_config(driver)
                     logger.info(f"Resync exitoso")
                     return connection_status_text, True
                 except Exception as ex:
                     raise
             else:
-                logger.info(f"Gateway ({ppp_gateway_value}) es el esperado ({PPP_GATEWAY})")
+                logger.info(f"Gateway ({ppp_gateway_value}) está en la lista de esperados ({PPP_VALID_GATEWAY_LIST})")
         else:
             logger.info("Resultado None en PPP Gateway. Sigue el flujo normal")
     except ElementException:
