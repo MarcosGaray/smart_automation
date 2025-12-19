@@ -52,11 +52,15 @@ def start_connection_validation(driver, onu_list = None, step = 1):
 
         # open_tr069_and_check_ppp
         try:
-            connection_status_text, resync= open_tr069_and_check_connectivity(driver)
-            if resync:
-                logger.warning(f"ONU {onu_username} - PPP Gateway no es el esperado. Se agrega a la lista de ONUs para reintentar")
-                check_again_onu_list.append(onu_data)
-                continue
+            connection_status_text = open_tr069_and_check_connectivity(driver)
+            """  if resync:
+                    if step <= 3:
+                        logger.warning(f"ONU {onu_username} - PPP Gateway no es el esperado. Se agrega a la lista de ONUs para reintentar")
+                        check_again_onu_list.append(onu_data)
+                    else:
+                        log_connection_fail(onu_username, "PPP Gateway no es el esperado.", onu_url)
+                        logger.error(f"ERROR {onu_username}:  PPP Gateway no es el esperado.")
+                    continue """
         except Exception as e:
             short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
             if step <= 3:
@@ -172,26 +176,26 @@ def open_tr069_and_check_connectivity(driver, timeout=60):
     except Exception:
         raise ElementException("Error inesperado al abrir la sección tr069 y PPP Interface Status")
 
-    try:
-        ppp_gateway_value = get_ppp_gateway(driver)
-        if ppp_gateway_value:
-            logger.info(f"PPP Gateway REAL obtenido: {ppp_gateway_value}")
-            if not is_valid_ppp_gateway(ppp_gateway_value):
-                try:
-                    logger.warning(f"Gateway ({ppp_gateway_value}) no está en la lista de esperados ({PPP_VALID_GATEWAY_LIST}). Intentando resync")
-                    resync_onu_config(driver)
-                    logger.info(f"Resync exitoso")
-                    return connection_status_text, True
-                except Exception as ex:
-                    raise
+    """  try:
+            ppp_gateway_value = get_ppp_gateway(driver)
+            if ppp_gateway_value:
+                logger.info(f"PPP Gateway REAL obtenido: {ppp_gateway_value}")
+                if not is_valid_ppp_gateway(ppp_gateway_value):
+                    try:
+                        logger.warning(f"Gateway ({ppp_gateway_value}) no está en la lista de esperados ({PPP_VALID_GATEWAY_LIST}). Intentando resync")
+                        resync_onu_config(driver)
+                        logger.info(f"Resync exitoso")
+                        return connection_status_text, True
+                    except Exception as ex:
+                        raise
+                else:
+                    logger.info(f"Gateway ({ppp_gateway_value}) está en la lista de esperados ({PPP_VALID_GATEWAY_LIST})")
             else:
-                logger.info(f"Gateway ({ppp_gateway_value}) está en la lista de esperados ({PPP_VALID_GATEWAY_LIST})")
-        else:
-            logger.info("Resultado None en PPP Gateway. Sigue el flujo normal")
-    except ElementException:
-        raise
-    except Exception:
-        raise ElementException("Error inesperado al obtener PPP Gateway")
+                logger.info("Resultado None en PPP Gateway. Sigue el flujo normal")
+        except ElementException:
+            raise
+        except Exception:
+            raise ElementException("Error inesperado al obtener PPP Gateway") """
 
     if connection_status_text != espected_connection_status:
         try:
@@ -202,5 +206,5 @@ def open_tr069_and_check_connectivity(driver, timeout=60):
         except Exception:
             raise ElementException("Error inesperado al intentar Reset ppp connection")
     
-    return connection_status_text, False
+    return connection_status_text #, False
 
