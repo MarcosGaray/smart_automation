@@ -5,6 +5,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from typing import Optional
 import time
 from exceptions import ElementException
+from utils.enum import TR069Status
 from utils.logger import get_logger
 from utils import words_and_messages as msg
 
@@ -66,7 +67,7 @@ def assert_real_function_result(function, driver, expected_result=None, attempt_
 
         elif expected_result is not None:
             if isinstance(real_result, str) and isinstance(expected_result, str):
-                if expected_result == "connected":
+                if expected_result == TR069Status.CONNECTED:
                     if real_result.strip().lower() == expected_result.strip().lower():
                         return real_result
                 else:

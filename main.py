@@ -1,12 +1,13 @@
 from selenium.webdriver.common.by import By
 from driver_setup import start_driver
 from smartolt.login import login_smartolt
-from smartolt.navigate import go_to_configured_tab, search_user, open_matching_result, go_back, go_to_configured_by_URL
+from smartolt.navigate import go_to_URL, go_to_configured_tab, open_matching_results_and_change_speed_profile, search_user, open_matching_result, go_back, go_to_configured_by_URL
 from sheets.sheets_reader import load_onu_list
 from sheets.sheets_writer import log_migration_success, log_fail, log_disconected_success, log_check_svlan_success, backup_success_block,create_not_processed_temp, remove_from_not_processed_temp,rename_not_processed_temp,log_check_attached_vlans
+from utils.locators import GENERIC_TABLE_LOCATOR_1
 from utils.logger import get_logger
 from smartolt.onu_actions import migrate_vlan
-from data import USER, PASSWORD, INPUT_ONUS_FILE
+from data import SPEED_PROFILE_URLS, USER, PASSWORD, INPUT_ONUS_FILE
 import pdb
 from exceptions import ElementException,Disconnected_ONU_Exception,ConnectionValidationException, AttachedVlansException
 from smartolt.connectivity import start_connection_validation
@@ -15,6 +16,36 @@ logger = get_logger(__name__)
 
 
 def main():
+    logger.info("Cargando webdriver...")
+    driver = start_driver()
+
+    try:
+        logger.info("Iniciando sesión...")
+        login_smartolt(driver, USER, PASSWORD)
+        logger.info("Sesión iniciada.")
+    except Exception as e:
+        logger.error(f"Error en login: {e}")
+        driver.quit()
+        return
+
+    process_value = "0"
+    while process_value not in ["1", "2"]:
+        process_value = input("Migración de VLANs (1) o cambio de perfiles de velocidad (2): ")
+    
+    try:
+        if process_value == "1":
+            vlan_migration_main(driver)
+        else:
+            speed_profile_main(driver) 
+    except Exception as e:
+        logger.error(e)
+        return
+
+    input("ENTER para cerrar...")
+    driver.quit()
+
+
+def vlan_migration_main(driver):
     # 1. Cargar lista de ONUs
     try:
         onu_list = load_onu_list(INPUT_ONUS_FILE)
@@ -28,19 +59,6 @@ def main():
 
     # INICIALIZAR no_procesados CON TODAS
     create_not_processed_temp(onu_list)
-
-    logger.info("Cargando webdriver...")
-    driver = start_driver(True)
-
-    try:
-        logger.info("Iniciando sesión...")
-        login_smartolt(driver, USER, PASSWORD)
-        logger.info("Sesión iniciada.")
-    except Exception as e:
-        logger.error(f"Error en login: {e}")
-        rename_not_processed_temp()
-        driver.quit()
-        return
 
     try:
         go_to_configured_tab(driver)
@@ -134,8 +152,7 @@ def main():
     rename_not_processed_temp()
     logger.info("Proceso finalizado. Archivo sheets/output/no_procesados.csv creado.")
 
-    input("ENTER para cerrar...")
-    driver.quit()
+
 
 
 def excecute_connection_validation_block(driver, block_number):
@@ -160,6 +177,33 @@ def excecute_connection_validation_block(driver, block_number):
         logger.error(f"Error inesperado en la validación de conexión: {e}")
     
     return block_number
+
+def speed_profile_main(driver):
+    wait_for = GENERIC_TABLE_LOCATOR_1
+
+    for url in SPEED_PROFILE_URLS:
+        def go_to_URL_callback():
+            go_to_URL(driver, url = url)
+
+        try:
+            go_to_URL_callback()
+
+            logger.info('')
+            logger.info('---------------------------------------------------------')
+
+            logger.info(f"Procesando {url} ...")
+            
+            open_matching_results_and_change_speed_profile(driver, go_to_URL_callback)
+            
+        except Exception as e:
+            short_msg = getattr(e, "msg", str(e)).split("\n")[0].strip()
+            log_fail('-',f"{short_msg}")
+            logger.error(f"ERROR: {short_msg}")
+
+    
+    logger.info('---------------------------------------------------------')
+    logger.info("Se finaliza procesamiento.")
+
 
 if __name__ == "__main__":
     main()

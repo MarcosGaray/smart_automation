@@ -1,11 +1,11 @@
 import os
 import pandas as pd
 from datetime import datetime
-from data import ROUTER_NAME
+from data import FOLDER_NAME
 
 date = datetime.now().strftime("%Y-%m-%d__%H-%M-%S")
 # Router general path
-GENERAL_OUTPUT_FOLDER = f"exports/output/{ROUTER_NAME}"
+GENERAL_OUTPUT_FOLDER = f"exports/output/{FOLDER_NAME}"
 
 # Router specific migration path by date
 OUTPUT_FOLDER = f"{GENERAL_OUTPUT_FOLDER}/{date}"
@@ -37,6 +37,18 @@ def log_migration_success(username,url):
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
     log_all_migration_success(username, timestamp)
     log_all_success(username,"connected", timestamp)
+
+def log_speed_change_success(username):
+    ensure_output_folder()
+    timestamp = datetime.now().isoformat()
+    df = pd.DataFrame([{
+        "username": username,
+        "timestamp": timestamp
+    }])
+    path = os.path.join(OUTPUT_FOLDER, "speed-change-success.csv")
+    df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
+    log_all_migration_success(username, timestamp, filename="all-speed-change-success.csv")
+
     
 def log_disconected_success(username, reason):
     ensure_output_folder()
@@ -63,7 +75,7 @@ def log_all_disconnected_success(username, reason, timestamp=None):
     path = os.path.join(GENERAL_OUTPUT_FOLDER, "all-disconnected-success.csv")
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
 
-def log_all_migration_success(username, timestamp=None):
+def log_all_migration_success(username, timestamp=None, filename ="all-migration-success.csv"):
     ensure_output_folder(GENERAL_OUTPUT_FOLDER)
     if timestamp is None:
         timestamp = datetime.now().isoformat()
@@ -71,7 +83,7 @@ def log_all_migration_success(username, timestamp=None):
         "username": username,
         "timestamp": timestamp
     }])
-    path = os.path.join(GENERAL_OUTPUT_FOLDER, "all-migration-success.csv")
+    path = os.path.join(GENERAL_OUTPUT_FOLDER, filename)
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
 
 def log_all_success(username, status, timestamp=None):

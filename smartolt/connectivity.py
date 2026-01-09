@@ -1,3 +1,4 @@
+from utils.enum import TR069Status
 from utils.helpers import assert_real_function_result, wait_visible
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
@@ -5,12 +6,13 @@ from utils.logger import get_logger
 from sheets.sheets_reader import load_check_connection_list
 from sheets.sheets_writer import log_connection_success, log_connection_fail
 from exceptions import ElementException,  ConnectionValidationException
-from smartolt.onu_actions import get_onu_status, resync_onu_config
+from smartolt.onu_functions import get_onu_status, resync_onu_config
 from utils.helpers import safe_click
 import time
 from data import PPP_VALID_GATEWAY_LIST
 from utils import words_and_messages as msg
 from smartolt.onu_functions import get_ppp_gateway,is_valid_ppp_gateway
+from utils.locators import TR69_STATUS_BUTTON_LOCATOR, PPP_INTERFACE_SECTION_BUTTON_LOCATOR,CONECTION_STATUS_SPAN_LOCATOR,RESET_PPP_CONECTION_SELECTOR_LOCATOR, OK_MODAL_BUTTON_LOCATOR_1
 
 
 logger = get_logger(__name__)
@@ -78,7 +80,7 @@ def start_connection_validation(driver, onu_list = None, step = 1):
             
             continue
 
-        if connection_status_text == 'connected':
+        if connection_status_text.strip().lower() == TR069Status.CONNECTED:
             log_connection_success(onu_username,onu_url)
             logger.info(f"CONEXION EXITOSA {onu_username}")
         else:
@@ -105,23 +107,19 @@ def start_connection_validation(driver, onu_list = None, step = 1):
     
 
 def open_tr069_section(driver):
-    tr69_status_button_locator = (By.XPATH, "//button[@id='tr69_status_button']")
+    tr69_status_button_locator = TR69_STATUS_BUTTON_LOCATOR
     if not safe_click(driver, tr69_status_button_locator):
         raise ElementException("No se pudo abrir la ventana Configure. Error al clicar en el botón Configure")
     return True
 
 def open_ppp_interface_section(driver):
-    ppp_interface_locator = (
-        By.XPATH,
-        "//div[@id='status_tr69']//div[@id='all_tr69_pannels']"
-        "//div[contains(@class,'panel-heading') and contains(@data-groupname,'PPP Interface')]"
-        )
+    ppp_interface_locator = PPP_INTERFACE_SECTION_BUTTON_LOCATOR
     if not safe_click(driver, ppp_interface_locator):
         raise ElementException("No se pudo desplegar la sección PPP Interface. Error al clicar en el botón PPP Interface")
     return True
 
 def check_connection_status(driver):
-    connection_status_span_locator = (By.XPATH, "//td[normalize-space()='Connection status']/following-sibling::td//span")
+    connection_status_span_locator = CONECTION_STATUS_SPAN_LOCATOR
     try:
         connection_status_span = wait_visible(driver, connection_status_span_locator,6)
         connection_status_text = connection_status_span.text.strip().lower()
@@ -132,9 +130,7 @@ def check_connection_status(driver):
 def reset_ppp_connection(driver, timeout=60):
     time.sleep(4)
     # 1) Localizador del combo "Reset connection"
-    reset_select_locator = (By.XPATH,
-        "//td[normalize-space()='Reset connection']/following-sibling::td//select"
-    )
+    reset_select_locator = RESET_PPP_CONECTION_SELECTOR_LOCATOR
     # 2) Esperar y seleccionar "Yes"
     try:
         reset_select = wait_visible(driver, reset_select_locator)
@@ -149,7 +145,7 @@ def reset_ppp_connection(driver, timeout=60):
 
     # 4) Modal de confirmación "OK" 2 veces el mismo boton
     for i in range(2):
-        modal_ok_btn_locator = (By.XPATH,"//div[@class='messagebox_buttons']//button[@class='messagebox_button_done']")
+        modal_ok_btn_locator = OK_MODAL_BUTTON_LOCATOR_1
 
         try:
             ok_btn = wait_visible(driver, modal_ok_btn_locator)

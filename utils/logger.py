@@ -3,11 +3,11 @@ import os
 from logging import Logger
 from colorama import Fore, Style, init as colorama_init
 from datetime import datetime
-from data import ROUTER_NAME
+from data import FOLDER_NAME
 colorama_init(autoreset=True)
 
 # Folder donde se guardan los logs
-LOG_FOLDER = f"logs/{ROUTER_NAME}"
+LOG_FOLDER = f"logs/{FOLDER_NAME}"
 
 # Usamos fecha + hora sin ":" para Windows
 timestamp = datetime.now().strftime("%Y-%m-%d__%H-%M-%S")
